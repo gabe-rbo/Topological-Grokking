@@ -45,6 +45,7 @@ Typical usage:
     python reproduce.py --conditions sum:20 --smoke-test
 """
 import argparse
+import shutil
 import subprocess
 import sys
 import time
@@ -244,7 +245,13 @@ def stage_paper(args):
               "without the Methodology section until that file is filled in. "
               "See BRACIS-2026/article/README.md.\n")
 
-    cmd = ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error",
+    if shutil.which("inkscape") is None:
+        print("\n[warning] `inkscape` isn't on PATH -- main_v3.tex's \\includesvg figures "
+              "(the svg package, with -shell-escape below) need it to convert each .svg to "
+              "PDF at compile time. Install it first (e.g. `brew install inkscape` on macOS), "
+              "or this stage will fail with \"File ..._svg-tex.pdf is missing\".\n")
+
+    cmd = ["latexmk", "-pdf", "-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
            "-output-directory=" + str(ARTICLE_DIR), main_tex.name]
     run(cmd, dry_run=args.dry_run, cwd=str(ARTICLE_DIR))
 
