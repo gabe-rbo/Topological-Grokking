@@ -1,0 +1,50 @@
+\section{Introduction}
+\label{sec:intro}
+
+Understanding when and why neural networks generalize — particularly in
+regimes where training and generalization dynamics decouple — remains one
+of the most consequential open problems in deep learning theory. A
+striking instance of this decoupling is the \emph{grokking} phenomenon,
+first described by Power et al.~\cite{power2022grokking}: a small
+transformer trained on modular arithmetic tasks overfits the training
+data for thousands of epochs before suddenly achieving near-perfect
+generalization on held-out examples, long after any conventional
+early-stopping criterion would have terminated training. Existing
+explanations approach this transition from complementary angles. Nanda
+et al.~\cite{nanda2023progress} identify discrete Fourier transform
+circuits that form gradually and eventually dominate the network's
+behavior, framing grokking as a smooth internal competition between
+memorizing and generalizing subnetworks. Hwang and
+Park~\cite{hwang2026intrinsic} propose that intrinsic task symmetries
+drive a three-stage representational reorganization culminating in
+task-aligned geometry. Both perspectives operate at the level of
+specific circuits or algebraic symmetry groups, leaving open the
+question of whether higher-level topological properties of the full
+representation space follow a consistent, measurable pattern across
+grokking events.
+
+In this work, we address this question by applying Topological Data
+Analysis (TDA) to track global topological invariants — persistent
+homology (Betti numbers) and intrinsic dimensionality — across the
+layer-wise activation spaces of a small transformer throughout training.
+TDA is well-suited to this setting: it operates directly on the shape
+of high-dimensional point clouds without assuming a parametric structure,
+and its core summary statistics are provably stable under small
+perturbations of the input data~\cite{cohen2005stability}. Our main
+contributions are: (i) a modular TDA pipeline combining Maximum
+Likelihood intrinsic dimension estimation~\cite{levina2004maximum},
+topology-guided dimensionality reduction, and persistent homology via
+GUDHI~\cite{gudhi2025}; (ii) a layer-wise topological characterization
+of grokking showing that $\beta_0$ decreases and stabilizes in decoder
+layers while converging to a higher stable value in the linear layer,
+concurrently with the rise in validation accuracy; (iii) evidence that
+intrinsic dimension decreases consistently across all layers in
+generalizing conditions and remains elevated in non-generalizing ones;
+and (iv) a comparative analysis across five training fractions and two
+modular arithmetic tasks that identifies topological markers
+distinguishing generalization from persistent memorization. Our analysis
+is scoped to a single small transformer architecture trained on modular
+arithmetic; the extent to which these findings generalize to larger
+models or natural language tasks remains an open question. The identified
+relationships between topological structure and generalization are
+correlational, not causal.

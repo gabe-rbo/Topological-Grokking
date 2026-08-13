@@ -1,0 +1,64 @@
+\documentclass[runningheads]{llncs.cls}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{svg}
+\usepackage{float}
+\usepackage{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+\urlstyle{rm}
+\usepackage{todonotes}
+\usepackage{enumitem}
+\usepackage{booktabs}
+
+\begin{document}
+
+\title{Characterizing Grokking via Topological Data Analysis in a Small Transformer Model}
+
+%
+    \author{Anonymous Author(s)}
+
+\authorrunning{Anonymous et al.}
+
+\institute{
+    Anonymous Institution(s) \\
+    \email{anonymous@anonymous.com}
+}
+
+%
+\maketitle              
+
+\begin{abstract}
+The grokking phenomenon, in which neural networks transition from memorization to sudden generalization after prolonged training, remains an important area of ongoing research in deep learning. While prior work has focused on mechanistic or symmetry-based explanations, less attention has been given to the global structure of learned representations. In this work, we propose a novel perspective by leveraging Topological Data Analysis to investigate the geometric and topological evolution of representations in a Small Transformer Model (LLMs) trained on modular arithmetic tasks. Our approach combines persistent homology and intrinsic dimension estimation to track how representation spaces evolve across different layers during training. We show that successful generalization frequently coincides with a structural simplification of the representation space, characterized by a reduction in intrinsic dimension and a stabilization of topological features. In contrast, models that fail to generalize exhibit higher-dimensional and unstable topological structures. These findings suggest that grokking can be understood as a topological shift toward simpler and more organized manifolds, offering a new algebraic-topological interpretation of generalization in deep neural networks.
+\keywords{Grokking  \and Topological Data Analysis \and Homology}
+\end{abstract}
+
+%\include{sections/introduction}
+%\include{sections/related-work}
+%\include{sections/background}
+%\include{sections/methodology}
+%\include{sections/results}
+%\include{sections/future-research}
+
+\input{sections/introduction}
+\input{sections_v2/related-work_v2}
+\input{sections_v2/background_v2}
+\input{sections_v2/methodology_v2}
+\input{sections_v2/results_v2}
+\input{sections_v2/conclusion-future-research_v2}
+
+\begin{credits}
+\subsubsection{\ackname} This study was funded by Anonymous %\href{https://www.kunumi.com/}{Kunumi}.
+
+\subsubsection{\discintname}
+The authors declare no competing interests.
+\end{credits}
+
+\bibliographystyle{splncs04}
+\bibliography{sections/bibliography}
+
+\end{document}

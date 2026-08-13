@@ -1,0 +1,117 @@
+\section{Results}
+
+As training progresses, the model achieves both perfect training and validation accuracy. This convergence suggests underlying topological changes in the latent spaces. Although the analyzed representation spaces are highly dimensional, homologies of dimension greater than 2 were found to be very rare in our experiments. This is not necessarily a direct implication of the grokking effect. Because the cyclical modular group over the usual sum --- in our case $\mathbb{Z}_{97}$ --- is isomorphic to the 97th roots of unity, its underlying structure can be embedded in a 2-torus, which possesses trivial homology groups for dimensions strictly greater than 2. For this reason, all subsequent visualizations omit Betti numbers higher than 3.
+
+\subsection{Homologies}
+
+Our experiments utilized the modular sum and product datasets from OpenAI's original grokking experiments. For both datasets, we evaluated whether the model could generalize to the entire dataset when trained with a fraction $p \in \{30\%, 25\%, 20\%, 15\%, 10\%\}$ of randomly sampled data. 
+
+\subsubsection{Dataset: Modular Sum}
+
+In cases where the model successfully generalized (e.g., using 30\%, 25\%, or 20\% of the training data), no drastic changes in the evolution of topological invariants were observed. However, for smaller data fractions (15\% and 10\%) where the model failed to generalize, the evolution of homologies within the linear layer differed significantly compared to the successful generalization scenarios. 
+
+As training progresses and test accuracy rises, we observed that in the first decoder layer, generalization yields a representation space with fewer connected components. This can be interpreted as the model manipulating and gluing a hyperdimensional surface. Conversely, in the linear layer, the number of connected components increases as the model manipulates the manifold.
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_decoder_0_activations-30pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_linear_activations-30pct-k31-95percentil.svg}
+    \caption[30\% of training data.]{\textbf{30\% of training data.} Evolution of the Betti numbers for the first decoder and linear blocks. Notice that as validation accuracy rises, the number of connected components decreases for the first decoder block, while the opposite occurs in the linear block.}
+    \label{fig:sum-decoder0-linear-30pct}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_decoder_0_activations-20pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_linear_activations-20pct-k31-95percentil.svg}
+    \caption[20\% of training data.]{\textbf{20\% of training data.} The same behavior described in \hyperref[fig:sum-decoder0-linear-30pct]{Fig. 4} can be observed here.}
+    \label{fig:sum-decoder0-linear-20pct}
+\end{figure}
+
+In experiments where the model failed to achieve generalization, a much steeper descent in connected components (Betti 0) was observed in the first decoder block compared to \hyperref[fig:sum-decoder0-linear-30pct]{Fig. 4}. In contrast, the linear layer failed to converge to a stable number of connected components.
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_decoder_0_activations-15pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_linear_activations-15pct-k31-95percentil.svg}
+    \caption[15\% of training data.]{\textbf{15\% of training data.} Failure to generalize resulted in spikes in connected components within the linear layer and a steeper descent of connected components in the first decoder layer.}
+    \label{fig:sum-decoder0-linear-15pct}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_decoder_0_activations-10pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/sum/DE-evolution_betti_acc_reduced_linear_activations-10pct-k31-95percentil.svg}
+    \caption[10\% of training data.]{\textbf{10\% of training data.} The same behavior shown in \hyperref[fig:sum-decoder0-linear-15pct]{Fig. 6} can be observed here, albeit with smaller amplitude spikes.}
+    \label{fig:sum-decoder0-linear-10pct}
+\end{figure}
+
+\subsubsection{Dataset: Modular Product}
+
+For the modular product dataset, behavior similar to the modular sum experiments was observed. Generalization occurred more rapidly at higher data fractions, consistently followed by a decrease of Betti numbers in the first decoder layer and convergence in the linear layer.
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_decoder_0_activations-30pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_linear_activations-30pct-k31-95percentil.svg}
+    \caption[30\% of training data (Modular Product).]{\textbf{30\% of training data.} Although generalization occurred much faster, the Betti numbers converged in the linear layer and decreased in the first decoder layer.}
+    \label{fig:prod-decoder0-linear-30pct}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_decoder_0_activations-20pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_linear_activations-20pct-k31-95percentil.svg}
+    \caption[20\% of training data (Modular Product).]{\textbf{20\% of training data.} In the linear layer, the same convergence as before is observed, although preceded by anomalous behavior. The decoder converged to a higher amount of connected components (Betti 0) as generalization occurred.}
+    \label{fig:prod-decoder0-linear-20pct}
+\end{figure}
+
+In cases where the model did not reach generalization, the Betti numbers exhibited highly anomalous behavior. In particular, for 15\% of the dataset, the model slowly approached generalization, but training terminated prior to convergence. This scenario exposes the extended topological evolution of earlier, successful convergence cases.  
+
+\begin{figure}[htbp]
+    \centering
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_decoder_0_activations-15pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_linear_activations-15pct-k31-95percentil.svg}
+    \caption[15\% of training data (Modular Product).]{\textbf{15\% of training data.} Generalization began to occur, accompanied by similar topological behaviors as noted in earlier successful runs.}
+    \label{fig:prod-decoder0-linear-15pct}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_decoder_0_activations-10pct-k31-95percentil.svg}
+    \includesvg[width=\linewidth]{plots/prod/prod-DE-evolution_betti_acc_reduced_linear_activations-10pct-k31-95percentil.svg}
+    \caption[10\% of training data (Modular Product).]{\textbf{10\% of training data.} A rise in connected components (Betti 0) in the decoder layer was observed as the model's accuracy plummeted, indicating a failure to learn a coherent manifold structure.}
+    \label{fig:prod-decoder0-linear-10pct}
+\end{figure}
+
+\newpage
+
+\subsection{Intrinsic Dimensions}
+
+We also observed that successful generalization is accompanied by a decrease in intrinsic dimension. This implies that the representation spaces converge to lower-dimensional manifolds. Conversely, in scenarios where the model fails to generalize, the intrinsic dimension of the representation manifold remains significantly higher.
+
+\subsubsection{Dataset: Modular Sum}
+
+For the modular sum dataset, the evolution of the intrinsic dimensions across layers is illustrated in \hyperref[fig:IntrinsicDimensionEvolutionSum]{Fig. 12}.
+
+\begin{figure}[H]
+    \centering
+    \includesvg[width=\linewidth]{plots/sum/Intrinsic-Dimension-Evolution_Decoder0.svg} 
+    \includesvg[width=\linewidth]{plots/sum/Intrinsic-Dimension-Evolution_Decoder1.svg} 
+    \includesvg[width=\linewidth]{plots/sum/Intrinsic-Dimension-Evolution_Linear.svg} 
+    \caption[Intrinsic dimension evolution (Modular Sum).]{Evolution of the intrinsic dimension of the representation manifolds for each model layer during training on the modular sum dataset.}
+    \label{fig:IntrinsicDimensionEvolutionSum}
+\end{figure}
+
+\subsubsection{Dataset: Modular Product}
+
+For the modular product dataset, similar behavior can be observed in \hyperref[fig:IntrinsicDimensionEvolutionProd]{Fig. 13}.
+
+\begin{figure}[H]
+    \centering
+    \includesvg[width=\linewidth]{plots/prod/prod-data-Intrinsic-Dimension-Evolution_prod_dataDecoder0.svg} 
+    \includesvg[width=\linewidth]{plots/prod/prod-data-Intrinsic-Dimension-Evolution_prod_dataDecoder1.svg} 
+    \includesvg[width=\linewidth]{plots/prod/prod-data-Intrinsic-Dimension-Evolution_prod_dataLinear.svg} 
+    \caption[Intrinsic dimension evolution (Modular Product).]{Evolution of the intrinsic dimension of the representation manifolds for each model layer during training on the modular product dataset.}
+    \label{fig:IntrinsicDimensionEvolutionProd}
+\end{figure}

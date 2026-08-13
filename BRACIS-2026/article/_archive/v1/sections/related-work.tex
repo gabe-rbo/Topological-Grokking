@@ -1,0 +1,12 @@
+\section{Related Work}
+
+Since the initial observation of the grokking phenomenon, numerous studies have attempted to unravel its underlying mechanisms. Although our methodology relies heavily on topological invariants, existing literature offers complementary perspectives that provide meaningful explanations for this delayed generalization. These include:
+
+\paragraph{Mechanistic Interpretability \cite{nanda2023progressmeasuresgrokkingmechanistic}.} 
+%A prominent line of research seeks to reverse-engineer the internal algorithms learned by neural networks during the grokking phase. 
+Nanda et al.~\cite{nanda2023progressmeasuresgrokkingmechanistic} demonstrated that grokking, despite appearing as a sudden phase transition in test accuracy, is actually driven by a smooth, continuous process of internal circuit formation. By analyzing models trained on modular arithmetic, they found that networks gradually develop robust generalizing circuits (such as discrete Fourier transforms) while simultaneously relying on memorization circuits. As training progresses, the generalizing circuits become more efficient and eventually dominate the network's behavior. This mechanistic view frames grokking as an internal competition between memorizing and generalizing subnetworks.
+
+\paragraph{Intrinsic Task Symmetry \cite{hwang2026intrinsic}.}
+More recently, the inherent geometry of the representation space has been identified as a primary driver of the grokking phenomenon. Hwang and Park~\cite{hwang2026intrinsic} propose that intrinsic task symmetries define the structural reorganization of a model's representations. They identify a consistent three-stage training dynamic underlying grokking: an initial memorization phase, a symmetry acquisition phase, and a final geometric organization phase. According to their framework, true generalization emerges during the symmetry acquisition phase, after which the representations snap into a structured, task-aligned geometry.
+
+While the mechanistic approach isolates specific computational circuits and the symmetry-based framework highlights the geometric alignment of representations, our work introduces Topological Data Analysis as a robust, distinct alternative. By tracking the evolution of topological invariants, we aim to quantitatively capture the overarching shape and structural evolution of these representations as the network transitions from memorization to generalization.

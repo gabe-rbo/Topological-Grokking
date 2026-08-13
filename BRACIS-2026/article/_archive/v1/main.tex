@@ -1,0 +1,63 @@
+\documentclass[runningheads]{llncs.cls}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{color}
+\usepackage{svg}
+\usepackage{float}
+\usepackage{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+\urlstyle{rm}
+\usepackage{todonotes}
+\begin{document}
+
+\title{Characterizing Grokking via Topological Data Analysis in Large Language Models}
+
+%
+    \author{Anonymous Author(s)}
+
+\authorrunning{Anonymous et al.}
+
+\institute{
+    Anonymous Institution(s) \\
+    \email{anonymous@anonymous.com}
+}
+
+%
+\maketitle              
+
+\begin{abstract}
+The grokking phenomenon, in which neural networks transition from memorization to sudden generalization after prolonged training, remains a central open problem in deep learning. While prior work has focused on mechanistic or symmetry-based explanations, less attention has been given to the global structure of learned representations. In this work, we propose a novel perspective by leveraging Topological Data Analysis to investigate the geometric and topological evolution of representations in Large Language Models (LLMs) trained on modular arithmetic tasks. Our approach combines persistent homology and intrinsic dimension estimation to track how representation spaces evolve across different layers during training. We show that successful generalization is consistently associated with a structural simplification of the representation space, characterized by a reduction in intrinsic dimension and a stabilization of topological features. In contrast, models that fail to generalize exhibit higher-dimensional and unstable topological structures. These findings suggest that grokking can be understood as a topological phase transition toward simpler and more organized manifolds, offering a new algebraic-topological interpretation of generalization in deep neural networks.
+\keywords{Grokking  \and Topological Data Analysis \and Homology}
+\end{abstract}
+
+\newpage
+
+%\include{sections/introduction}
+%\include{sections/related-work}
+%\include{sections/background}
+%\include{sections/methodology}
+%\include{sections/results}
+%\include{sections/future-research}
+
+\input{sections/introduction}
+\input{sections/related-work}
+\input{sections/background}
+\input{sections/methodology}
+\input{sections/results}
+\input{sections/conclusion-future-research}
+
+\begin{credits}
+\subsubsection{\ackname} This study was funded by \href{https://www.kunumi.com/}{Kunumi}.
+
+\subsubsection{\discintname}
+The authors declare no competing interests.
+\end{credits}
+
+\bibliographystyle{splncs04}
+\bibliography{sections/bibliography}
+
+\end{document}

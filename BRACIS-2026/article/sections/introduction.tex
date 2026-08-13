@@ -1,0 +1,26 @@
+\section{Introduction}
+
+A fundamental objective across all domains of machine learning is achieving high predictive accuracy on both training and unseen validation data. While the optimization dynamics of deep neural networks are inherently stochastic, severe overfitting is universally regarded as a condition to be avoided. Consequently, the complex relationship between memorization and generalization remains one of the most significant open questions in the field. Demystifying these internal dynamics, and discovering whether generalization can be systematically induced, is crucial for advancing our theoretical understanding of deep learning.
+
+\subsection{Contextualization}
+
+In 2022, OpenAI published a paper on generalization beyond overfitting \cite{GrokkingOpenAI} in a model trained on modular operations, coining the term ``grokking'', derived from the verb \textit{to grok}, meaning to understand something profoundly. This phenomenon describes a scenario where a model heavily overfits the training data for many epochs, but eventually overcomes this memorization phase to achieve perfect generalization on the validation set.
+
+Because of its counterintuitive nature, significant efforts have been made to understand the mechanics behind this phenomenon. Prior work has primarily investigated how these models generalize modular operations through the lens of mechanistic interpretability \cite{nanda2023progressmeasuresgrokkingmechanistic}, or by analyzing intrinsic task symmetries. However, purely computational or circuit-based approaches often miss the broader structural and geometric reorganization occurring within the model's representation space.
+
+In this work, we analyze the grokking phenomenon through the lens of Topological Data Analysis (TDA), seeking to identify topological and geometrical indicators that arise during the grokking process. By examining the evolving shape of the data representations, we aim to provide a rigorous topological characterization of the grokking effect.
+
+\subsection{Contributions}
+
+Specifically, our main contributions are as follows:
+\begin{itemize}
+\item \textbf{Layer-Wise Topological Analysis:} We provide a granular analysis of how the geometric shape of data representations evolves across distinct components of a transformer model (embedding, decoder blocks, and linear layers) during the transition from memorization to generalization.
+\item \textbf{Topological Characterization of Grokking:} We identify key structural shifts and topological markers (such as the emergence or collapse of specific persistent homology classes) that correspond to the onset of the grokking phenomenon, offering a new geometric perspective on delayed generalization.
+\end{itemize}
+
+\subsection{Paper Outline}
+The remainder of this paper is structured as follows. Section 2 discusses related work in the fields of mechanistic interpretability and representation geometry. Section 3 details the background of TDA. Section 4 outlines our methodology, including the architecture, training regime, and mathematical pipeline used to extract topological invariants. Section 5 presents our empirical results and the observed topological markers of grokking, and Section 6 concludes with our final remarks and directions for future research.
+
+% \subsection{Code repository and reproducibility}
+
+% To ensure reproducibility, the code and datasets for all experiments are publicly available in our GitHub repository at \href{https://github.com/gabe-rbo/An-Investigation-on-the-Topology-of-Grokking}{github.com/gabe-rbo/An-Investigation-on-the-Topology-of-Grokking}. 

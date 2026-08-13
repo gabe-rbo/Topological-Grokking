@@ -1,0 +1,17 @@
+\section{Methodology}
+
+To replicate the original grokking experiment conducted by OpenAI \cite{GrokkingOpenAI}, we trained the same small Transformer architecture described in their paper and provided in their official repository. The model, composed of two layers and four attention heads, was trained for up to $10^6+1$ epochs on the modular addition dataset, using a prime modulus of $p=97$. We varied the percentage of the training dataset across different runs to observe generalization behavior under diverse conditions. Throughout the training process, we collected high-dimensional activation vectors from the following four components:
+
+\begin{enumerate}
+    \item The embedding layer;
+    \item Both decoder blocks;
+    \item The linear output layer;
+\end{enumerate}
+
+Using this collected data, we applied TDA techniques to extract invariant topological features. First, we employed Maximum Likelihood Estimation (MLE) \cite{LevinaBickel} to find the intrinsic dimension, $d$, of each activation manifold. This step is crucial, as it estimates the true number of degrees of freedom within the high-dimensional representation space before any transformations are applied, ensuring that its topological structure is preserved during manipulation. Subsequently, guided by the estimated intrinsic dimension $d$, we applied UMAP to reduce the dimensionality of the data to $2d$ components, in accordance with the Strong Whitney Embedding Theorem:
+
+\begin{theorem}[Strong Whitney's Embedding Theorem \cite{whitney1944self}]
+    Any smooth real $m$-dimensional manifold (required also to be Hausdorff and second-countable) can be smoothly embedded in the real $2m$-space, $\mathbb{R}^{2m}$,⁠ if $m > 0$. 
+\end{theorem}
+
+With the dimensionality reduced, we applied a fast mapping algorithm to construct the topological structure of the data \cite{QuickMapper}. For this step, we measured the Euclidean distance from each point to its $k$-th nearest neighbor, $x_k$, setting an epsilon threshold equal to the 95th percentile of these distances. This algorithm yielded a 1-skeleton (vertices and edges) of a simplicial complex that faithfully captures the shape of our data. Using the Python library GUDHI \cite{GUDHI}, we utilized this 1-skeleton to build and expand a simplex tree, generating higher-dimensional simplices (i.e., triangles, tetrahedrons, and their higher-dimensional equivalents). Finally, using the complete simplex tree, we calculated the persistent homology and Betti numbers of the model's representations, which quantify the presence of connected components, loops, voids, and their higher-dimensional analogs.

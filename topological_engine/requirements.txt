@@ -1,0 +1,47 @@
+# Dependencies specific to topological_engine/ (on top of the project's
+# main venv — torch, numpy, etc. are already covered by openai-grok's
+# setup.py). Pinned to the exact versions verified working for this
+# package (see grand_tour.py / intrinsic_dimension.py /
+# dimensionality_reduction.py docstrings for what was actually tested
+# against each).
+#
+# topological_autoencoders.py deliberately adds nothing to this file: it's
+# implemented directly in torch (already a project dependency), and its one
+# cross-module call — auto_fit_autoencoder's intrinsic-dimension estimate —
+# goes through intrinsic_dimension.py, whose scikit-dimension pin is below.
+#
+# Install with: pip install -r topological_engine/requirements.txt
+
+# grand_tour.py
+dtour==0.4.4                # headless tour computation (little_tour) + interactive Widget
+pymanopt==2.2.1              # Grassmann manifold geodesics (grand_tour, guided_tour)
+ipywidgets==8.1.8            # embed_minimal_html, for exporting Widgets to standalone HTML
+anywidget==0.11.0            # dtour.Widget's base class; pulled in by dtour but pinned
+                              # explicitly since save_widget_html's drop_defaults=False fix
+                              # depends on anywidget's specific _esm/_css trait behavior
+
+# intrinsic_dimension.py
+scikit-dimension==0.3.7      # skdim.id.* estimators, auto-discovered — see discover_estimators
+pandas==3.0.5                 # transitive: skdim/__init__.py unconditionally imports its
+                              # datasets submodule, which requires pandas even though this
+                              # package never calls into skdim.datasets itself
+pyarrow==25.0.0               # Parquet I/O for process_run's per-epoch result tables
+
+# dimensionality_reduction.py — method x backend support and per-combination
+# reproducibility differ; see that module's own docstring for the full table.
+umap-learn==0.5.12            # (umap, cpu) — verified bit-for-bit reproducible
+pacmap==0.9.1                 # (pacmap, cpu) — verified bit-for-bit reproducible
+trimap==1.1.5                 # (trimap, cpu) — verified NOT reproducible (no seed support
+                              # at all); installed anyway since the reduction itself works
+mlx==0.32.0                   # Apple Silicon Metal backend runtime (mlx-vis's dependency)
+mlx-vis==0.7.0                # Apple Silicon Metal backend for umap/pacmap/trimap —
+                              # none of the three are reproducible on this backend, verified
+# RAPIDS cuml (CUDA backend, umap only — no PaCMAP/TriMap support, confirmed
+# via RAPIDS's own open feature request github.com/rapidsai/cuml/issues/4726)
+# is deliberately NOT listed here: it isn't installable via plain
+# `pip install cuml` (needs a CUDA-toolkit-specific index, e.g.
+# `pip install cuml-cu12 --extra-index-url=https://pypi.nvidia.com` — see
+# https://rapids.ai/start.html) and this project's dev machine has no CUDA
+# device to pin/verify a version against. dimensionality_reduction.py
+# imports it lazily and only on a CUDA machine; install it yourself if you
+# have one.
