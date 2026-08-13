@@ -30,3 +30,12 @@ Do not edit these — if a bug is found here, it does not get fixed here
 (that would falsify the historical record); note it in
 `BRACIS-2026/code/README.md` instead and fix it, if applicable, in the
 general framework these were generalized into.
+
+**Language note:** `train.py` and `MP-DE-LatentSpaceTopology.py` still
+have Portuguese comments/docstrings/print-strings (written when this
+pipeline was first organized, before the "everything in English" pass —
+see the repository's root README history). Left as-is rather than
+translated, for the same reason nothing else here gets edited: this is
+meant to be exactly what ran, not a living document. Their functionality
+is fully covered, in English, by `run_train.py` and
+`topological_engine/persistent_homology.py` respectively.
