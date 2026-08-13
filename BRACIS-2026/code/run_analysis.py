@@ -16,7 +16,7 @@ that first, before importing anything else from this project (including
 topological_engine itself, whose _common.py imports torch).
 
 Usage:
-    python run_analysis.py --run_name bracis_sum_20pct --k_mle 15 --k_topology 31 --percentile 95
+    python run_analysis.py --run_name bracis_sum_20pct --k_mle 10 --k_topology 31 --percentile 95 --backend auto
 """
 import juliacall  # noqa: F401 - MUST be the first import in this process; see module docstring above
 
@@ -37,9 +37,16 @@ BLOCKS = ["embedding", "decoder_0", "decoder_1", "linear"]
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run_name", required=True, help="An nn/activations/ run already trained by run_train.py.")
-    parser.add_argument("--k_mle", type=int, default=15, help="Neighbors for MLE intrinsic-dimension estimation / UMAP.")
+    parser.add_argument("--k_mle", type=int, default=10,
+                         help="Neighbors for MLE intrinsic-dimension estimation / UMAP (default: 10, confirmed "
+                              "from article/sections_v3/related-work_v3.tex).")
     parser.add_argument("--k_topology", type=int, default=31, help="Neighbors for the dynamic-epsilon graph.")
     parser.add_argument("--percentile", type=float, default=95.0, help="Percentile for the dynamic-epsilon graph.")
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "cpu", "cuml", "mlx"],
+                         help="UMAP backend (default: auto -- CUDA/cuml if available, else Apple Silicon/mlx, "
+                              "else cpu; see topological_engine/dimensionality_reduction.py's module docstring). "
+                              "Only (umap, cpu) is verified bit-for-bit reproducible; --backend cpu trades speed "
+                              "for that exact-reproduction guarantee.")
     parser.add_argument("--overwrite", action="store_true", help="Recompute even if results already exist.")
     return parser
 
@@ -67,16 +74,24 @@ def main() -> None:
     # instead (min_dimension, not exposed on process_run/auto_reduce). Both
     # formulas agree whenever the MLE estimate itself is >= 2, which is the
     # case for anything but a collapsed/degenerate representation.
+    #
+    # backend/deterministic: --backend (default "auto") picks the fastest
+    # backend actually available (CUDA/cuml > Apple Silicon/mlx > cpu) --
+    # deterministic=True only for --backend cpu, since (umap, cpu) is the
+    # one combination verified bit-for-bit reproducible with a fixed seed;
+    # GPU backends are NOT reproducible even with one (see
+    # dimensionality_reduction.py's module docstring), so running on GPU is
+    # a deliberate speed-over-exact-reproduction trade, not a bug.
     dimensionality_reduction.process_run(
         args.run_name, keys=["blocks"], layers=BLOCKS, splits=["both"],
         methods=["umap"], n_components="auto",
         id_methods=["MLE"], id_max_samples=None,
         component_agg="median", embedding_bound="whitney",
-        backend="cpu", deterministic=True,
+        backend=args.backend, deterministic=(args.backend == "cpu"),
         method_kwargs={"umap": {"min_dist": 0.01, "n_neighbors": args.k_mle}},
         overwrite=args.overwrite,
     )
-    print(f"[ok] dimensionality_reduction: {args.run_name}")
+    print(f"[ok] dimensionality_reduction: {args.run_name} (backend={args.backend})")
 
     persistent_homology.process_run(
         args.run_name, reduction_method="umap", keys=["blocks"], layers=BLOCKS, splits=["both"],

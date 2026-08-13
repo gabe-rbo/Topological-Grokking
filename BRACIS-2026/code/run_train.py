@@ -15,7 +15,7 @@ grows across the whole sweep.
 
 Usage:
     python run_train.py --operator + --train_data_pct 20 --run_name bracis_sum_20pct \\
-        [--max_epochs 1000001 --save_every 5000 --random_seed 24 --weight_decay 0.1 --gpu 0]
+        [--max_epochs 1000001 --save_every 5000 --random_seed 24 --weight_decay 1.0 --gpu 0]
 """
 import argparse
 import sys
@@ -40,7 +40,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_epochs", type=int, default=10 ** 6 + 1)
     parser.add_argument("--save_every", type=int, default=5000, help="Activation-snapshot cadence, in epochs.")
     parser.add_argument("--random_seed", type=int, default=24)
-    parser.add_argument("--weight_decay", type=float, default=0.1)
+    parser.add_argument("--weight_decay", type=float, default=1.0,
+                         help="AdamW weight decay lambda (default: 1.0, confirmed from "
+                              "article/sections_v3/related-work_v3.tex).")
     parser.add_argument("--gpu", type=int, default=0, help="Forwarded to nn._common.train (0=first GPU/MPS, -1=CPU).")
     parser.add_argument("--overwrite", action="store_true",
                          help="Retrain even if nn/activations/<run_name>/ already has snapshots.")
@@ -78,6 +80,11 @@ def main() -> None:
         # own default, 100000, is a leftover from grok's original step-count
         # convention and doesn't match an epoch-bounded run).
         anneal_lr_steps=args.max_epochs,
+        # add_args()'s own default (0) means "auto-calculate", NOT full-batch --
+        # article/sections_v3/related-work_v3.tex states "full-batch gradient
+        # descent", which is batchsize=-1 in grok's convention ("-1 -> entire
+        # dataset" per add_args()'s own --batchsize help text).
+        batchsize=-1,
         math_operator=args.operator,
         train_data_pct=args.train_data_pct,
     )
