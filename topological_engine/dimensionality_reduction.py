@@ -548,7 +548,13 @@ def process_run(
     :param method_kwargs: optional {"umap": {...}, "pacmap": {...},
                           "trimap": {...}} extra kwargs merged into each
                           method's call.
-    :returns: paths of every .npz file written or already present.
+    :returns: paths of every .npz file written or already present. An item
+             whose reduction raises RuntimeError/ValueError (e.g.
+             n_components="auto" with every intrinsic-dimension estimator
+             failing on a degenerate/collapsed point cloud — realistically
+             possible for a barely-trained or untrained epoch_000000
+             snapshot) is logged as a warning and skipped rather than
+             aborting the whole batch, and is NOT included here.
     :raises ValueError: if `source_run` has no saved activation snapshots,
                         or n_components is neither an int nor "auto".
     """
@@ -584,25 +590,38 @@ def process_run(
                         for method in methods:
                             stem = f"{key}_{layer_tag}_{head_tag}{split_tag}_epoch{epoch:06d}_{method}"
                             out_path = out_dir / f"{stem}.npz"
-                            written.append(out_path)
                             if out_path.exists() and not overwrite:
+                                written.append(out_path)
                                 continue
 
                             item_seed = derive_seed(seed, key, layer, head_tag, split, epoch, method)
                             kwargs = method_kwargs.get(method)
-                            if n_components == "auto":
-                                result = auto_reduce(
-                                    X, method=method, id_methods=id_methods, id_max_samples=id_max_samples,
-                                    component_agg=component_agg, embedding_bound=embedding_bound,
-                                    component_margin=component_margin, backend=backend,
-                                    deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
-                                )
-                            else:
-                                result = reduce(
-                                    X, method=method, n_components=n_components, backend=backend,
-                                    deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
-                                )
+                            item_label = f"{key}/{layer_tag}/{head_tag}{split_tag}/epoch{epoch}/{method}"
+                            try:
+                                if n_components == "auto":
+                                    result = auto_reduce(
+                                        X, method=method, id_methods=id_methods, id_max_samples=id_max_samples,
+                                        component_agg=component_agg, embedding_bound=embedding_bound,
+                                        component_margin=component_margin, backend=backend,
+                                        deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
+                                    )
+                                else:
+                                    result = reduce(
+                                        X, method=method, n_components=n_components, backend=backend,
+                                        deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
+                                    )
+                            except (RuntimeError, ValueError) as e:
+                                # A degenerate item (e.g. a barely-trained/untrained snapshot
+                                # whose activations happen to be too collapsed/duplicated for
+                                # n_components="auto"'s intrinsic-dimension estimate to
+                                # succeed at all, or for `method` itself to run) shouldn't
+                                # abort an entire batch over "lots and lots of data" — matches
+                                # estimate_intrinsic_dimension's own per-method isolation, one
+                                # level up. Not written to `written`: no file exists for it.
+                                log.warning("dimensionality_reduction skipped %s: %s: %s", item_label, type(e).__name__, e)
+                                continue
 
+                            written.append(out_path)
                             extra = {k: v for k, v in result.items() if k not in ("embedding", "intrinsic_dimension_estimates")}
                             provenance = build_provenance(
                                 source_run=source_run, epoch=epoch, key=key, layer=layer,
