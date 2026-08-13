@@ -895,6 +895,17 @@ def train(
     hparams = _build_hparams(nn_type, hparams, hparam_overrides)
     hparams.datadir = os.path.abspath(hparams.datadir)
 
+    if hparams.random_seed != -1:
+        # grok.training.train() (grok's own reference entry point, which this
+        # function otherwise deliberately doesn't call — see this function's
+        # docstring) seeds exactly this way before building anything; nothing
+        # in _InjectableTransformer/Trainer construction does so on its own,
+        # so hparams.random_seed (add_args() default: -1, meaning "don't seed")
+        # would otherwise be silently ignored despite being a real hparam.
+        torch.manual_seed(hparams.random_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(hparams.random_seed)
+
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_name = run_name if run_name is not None else f"{nn_type}_{timestamp}"
 
