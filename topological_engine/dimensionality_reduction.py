@@ -16,6 +16,24 @@ Metal (mlx_vis) > CPU (umap-learn / pacmap / trimap).
     process_run("relu_20260804-140512")            # batch over a whole nn/activations/ run,
                                                      # all 3 methods by default
 
+REPRODUCING BRACIS-2026'S PUBLISHED UMAP CALL EXACTLY: the paper computed
+n_components itself (2 * max(2, round(a single MLE estimate)) — Whitney
+applied to a *floored* intrinsic-dimension guess, not auto_reduce's
+q75-across-12-estimators default) and used min_dist=0.01 (auto_reduce/
+reduce's default is 0.1) and a single fixed seed=42 for every call (not a
+distinct per-item seed). None of this needs a code change here — every
+piece is already reachable by calling reduce() directly instead of
+auto_reduce(), which is what BRACIS-2026/code/ does:
+
+    from topological_engine.intrinsic_dimension import estimate_intrinsic_dimension
+    mle = estimate_intrinsic_dimension(X, methods=["MLE"], max_samples=None,
+                                        method_kwargs={"MLE": {"K": k_mle}})[0]["dimension"]
+    n_components = 2 * max(2, round(mle))
+    result = reduce(X, method="umap", n_components=n_components, seed=42,
+                     backend="cpu", deterministic=True,
+                     method_kwargs={"min_dist": 0.01, "n_neighbors": k_mle})
+    # verified bit-for-bit reproducible across repeated calls with this exact call shape
+
 Not every method runs on every backend, and — this is the part worth
 reading before assuming anything is reproducible — determinism genuinely
 differs by (method, backend) pair. Both facts were established by actually
