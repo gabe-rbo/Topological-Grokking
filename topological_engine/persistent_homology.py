@@ -551,23 +551,40 @@ def save_evolution_widget_html(
 
 
 _REDUCTION_FILENAME_RE = re.compile(
-    r"^(?P<key>attentions|values|ffn_activations)_layer(?P<layer>\d+)_"
-    r"(?P<head>allheads|head\d+)_epoch(?P<epoch>\d+)_(?P<method>\w+)\.npz$"
+    r"^(?P<key>attentions|values|ffn_activations|blocks)_"
+    r"(?P<layer_tag>[^_]+(?:_\d+)?)_"
+    r"(?P<head>allheads|head\d+)"
+    r"(?:_(?P<split>train|test|both))?"
+    r"_epoch(?P<epoch>\d+)_(?P<method>\w+)\.npz$"
 )
+
+_LAYER_NUM_RE = re.compile(r"^layer(\d+)$")
+
+
+def _parse_layer_tag(layer_tag: str) -> Any:
+    """"layer03" -> 3 (int, matching dimensionality_reduction.process_run's
+    int-layer filenames); anything else -> itself unchanged (a block name
+    string, e.g. "decoder_0" — %02d can't format a string, so those
+    filenames never got a "layer" prefix in the first place)."""
+    m = _LAYER_NUM_RE.match(layer_tag)
+    return int(m.group(1)) if m else layer_tag
 
 
 def _iter_reduction_items(
     source_run: str,
     reduction_method: Method,
     keys: Optional[Sequence[ActivationKey]],
-    layers: Optional[Sequence[int]],
+    layers: Optional[Sequence[Any]],
     epochs: Optional[Sequence[int]],
     heads: Optional[Sequence[Optional[int]]],
+    splits: Optional[Sequence[Optional[str]]],
 ):
-    """Yields (path, key, layer, head_tag, epoch) for every
+    """Yields (path, key, layer, head_tag, split, epoch) for every
     dimensionality_reduction.process_run() output matching the given
-    filters, by parsing its established <key>_layer<NN>_<head>_epoch<NNNNNN>_<method>.npz
-    filename convention (see that module's process_run)."""
+    filters, by parsing its established
+    <key>_<layer_tag>_<head>[_<split>]_epoch<NNNNNN>_<method>.npz filename
+    convention (see that module's process_run) — layer_tag is "layer<NN>"
+    for int layers or a bare block name (e.g. "decoder_0") for "blocks"."""
     wanted_head_tags = (
         None if heads is None
         else {"allheads" if h is None else f"head{h:02d}" for h in heads}
@@ -577,7 +594,9 @@ def _iter_reduction_items(
         m = _REDUCTION_FILENAME_RE.match(path.name)
         if not m or m["method"] != reduction_method:
             continue
-        key, layer, head_tag, epoch = m["key"], int(m["layer"]), m["head"], int(m["epoch"])
+        key = m["key"]
+        layer = _parse_layer_tag(m["layer_tag"])
+        head_tag, split, epoch = m["head"], m["split"], int(m["epoch"])
         if keys is not None and key not in keys:
             continue
         if layers is not None and layer not in layers:
@@ -586,16 +605,19 @@ def _iter_reduction_items(
             continue
         if wanted_head_tags is not None and head_tag not in wanted_head_tags:
             continue
-        yield path, key, layer, head_tag, epoch
+        if splits is not None and split not in splits:
+            continue
+        yield path, key, layer, head_tag, split, epoch
 
 
 def process_run(
     source_run: str,
     reduction_method: Method = "umap",
     keys: Optional[Sequence[ActivationKey]] = None,
-    layers: Optional[Sequence[int]] = None,
+    layers: Optional[Sequence[Any]] = None,
     epochs: Optional[Sequence[int]] = None,
     heads: Optional[Sequence[Optional[int]]] = None,
+    splits: Optional[Sequence[Optional[str]]] = None,
     k_neighbors: int = 31,
     percentile: float = 95.0,
     maxdim: Optional[int] = None,
@@ -605,10 +627,11 @@ def process_run(
 ) -> List[Path]:
     """
     Batch-computes Betti numbers across every (activation key, layer, head,
-    epoch) combination for one nn/activations/ run, writing one Parquet
-    file per epoch to topological_engine/results/<source_run>/persistent_homology/
-    — same per-epoch-file convention as intrinsic_dimension.process_run,
-    for the same reasons (resumability, avoiding one ever-growing file).
+    split, epoch) combination for one nn/activations/ run, writing one
+    Parquet file per epoch to
+    topological_engine/results/<source_run>/persistent_homology/ — same
+    per-epoch-file convention as intrinsic_dimension.process_run, for the
+    same reasons (resumability, avoiding one ever-growing file).
 
     Reads its input from dimensionality_reduction.process_run()'s saved
     embeddings rather than raw activation snapshots — see this module's
@@ -622,13 +645,19 @@ def process_run(
                              methods ("umap", "pacmap", "trimap") to read
                              embeddings from.
     :param keys: which activation tensors to include — any of "attentions",
-                 "values", "ffn_activations"; None (default) includes
-                 whatever's present.
-    :param layers: which decoder-block layers to include; None includes all.
+                 "values", "ffn_activations", "blocks"; None (default)
+                 includes whatever's present.
+    :param layers: which decoder-block layers (ints) or block names (strs,
+                   for "blocks") to include; None includes all.
     :param epochs: which epochs to include; None includes all.
     :param heads: which attention heads to include (ignored for
-                  "ffn_activations"); None (default) includes all, both the
-                  all-heads-concatenated view and individual heads if saved.
+                  "ffn_activations"/"blocks"); None (default) includes all,
+                  both the all-heads-concatenated view and individual heads
+                  if saved.
+    :param splits: which split(s) to include for "blocks" (ignored
+                   otherwise; irrelevant for non-"blocks" keys, whose saved
+                   filenames have no split component) — any of "train",
+                   "test", "both"; None (default) includes whatever's present.
     :param k_neighbors: forwarded to betti_numbers.
     :param percentile: forwarded to betti_numbers.
     :param maxdim: forwarded to betti_numbers.
@@ -642,11 +671,11 @@ def process_run(
     :returns: paths of every epoch_<N>.parquet file written or already present.
     :raises ValueError: if no matching dimensionality_reduction results exist.
     """
-    items_by_epoch: Dict[int, List[Tuple[Path, str, int, str]]] = {}
-    for path, key, layer, head_tag, epoch in _iter_reduction_items(
-        source_run, reduction_method, keys, layers, epochs, heads
+    items_by_epoch: Dict[int, List[Tuple[Path, str, Any, str, Optional[str]]]] = {}
+    for path, key, layer, head_tag, split, epoch in _iter_reduction_items(
+        source_run, reduction_method, keys, layers, epochs, heads, splits
     ):
-        items_by_epoch.setdefault(epoch, []).append((path, key, layer, head_tag))
+        items_by_epoch.setdefault(epoch, []).append((path, key, layer, head_tag, split))
 
     if not items_by_epoch:
         raise ValueError(
@@ -665,16 +694,16 @@ def process_run(
             continue
 
         rows: List[Dict[str, Any]] = []
-        for path, key, layer, head_tag in items_by_epoch[epoch]:
+        for path, key, layer, head_tag, split in items_by_epoch[epoch]:
             X = np.load(path)["embedding"]
-            item_seed = derive_seed(seed, key, layer, head_tag, epoch)
+            item_seed = derive_seed(seed, key, layer, head_tag, split, epoch)
             result = betti_numbers(
                 X, k_neighbors=k_neighbors, percentile=percentile, maxdim=maxdim,
                 simplify=simplify, seed=item_seed,
             )
             provenance = build_provenance(
                 source_run=source_run, epoch=epoch, key=key, layer=layer,
-                head=head_tag, reduction_method=reduction_method,
+                head=head_tag, split=split, reduction_method=reduction_method,
             )
             row = {**provenance, **{k: v for k, v in result.items() if k not in ("graph", "labels")}}
             rows.append(row)

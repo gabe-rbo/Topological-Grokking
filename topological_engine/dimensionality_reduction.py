@@ -475,9 +475,10 @@ def auto_reduce(
 def process_run(
     source_run: str,
     keys: Sequence[ActivationKey] = ("ffn_activations",),
-    layers: Optional[Sequence[int]] = None,
+    layers: Optional[Sequence[Any]] = None,
     epochs: Optional[Sequence[int]] = None,
     heads: Optional[Sequence[Optional[int]]] = (None,),
+    splits: Sequence[str] = ("both",),
     methods: Sequence[Method] = _DEFAULT_METHODS,
     n_components: Union[int, str] = 2,
     id_methods: Union[str, Sequence[str]] = "all",
@@ -502,15 +503,24 @@ def process_run(
 
     :param source_run: an nn/activations/ run directory name.
     :param keys: which activation tensors to reduce — any of "attentions",
-                 "values", "ffn_activations".
-    :param layers: which decoder-block layers to process; None processes
-                   every layer present in each snapshot.
+                 "values", "ffn_activations", "blocks".
+    :param layers: which decoder-block layers to process (ints) or which
+                   block names to process (strs, e.g. "decoder_0", for
+                   "blocks"); None processes every layer present in each
+                   snapshot (assumes "ffn_activations" is present to count
+                   them — pass an explicit list of block names for
+                   "blocks"-only snapshots, which don't have that key).
     :param epochs: which epochs to process; None processes every epoch
                    saved for this run.
     :param heads: which attention heads to process for "attentions"/
-                  "values" (ignored for "ffn_activations"); None in this
-                  sequence means "concatenate all heads". Default (None,)
-                  processes only the all-heads-concatenated view.
+                  "values" (ignored otherwise); None in this sequence
+                  means "concatenate all heads". Default (None,) processes
+                  only the all-heads-concatenated view.
+    :param splits: which split(s) to process for "blocks" (ignored
+                   otherwise) — any of "train", "test", "both" (test+train
+                   stacked into one point cloud — see extract_point_cloud).
+                   Default ("both",) matches what the published pipeline
+                   analyzed.
     :param methods: which reduction methods to run per item — any of
                     "umap", "pacmap", "trimap". Default: all three.
     :param n_components: an int (used directly for every item, forwarded
@@ -559,45 +569,53 @@ def process_run(
 
         for key in keys:
             this_heads = heads if key in ("attentions", "values") else (None,)
+            this_splits = splits if key == "blocks" else (None,)
             for layer in resolved_layers:
+                # int layers (ffn_activations/attentions/values) keep the original
+                # zero-padded "layer03" tag; str layers ("blocks"' block names, e.g.
+                # "decoder_0") are used as-is — %02d can't format a string.
+                layer_tag = f"layer{layer:02d}" if isinstance(layer, int) else str(layer)
                 for head in this_heads:
                     head_tag = "allheads" if head is None else f"head{head:02d}"
-                    X = extract_point_cloud(snapshot, key=key, layer=layer, head=head)
+                    for split in this_splits:
+                        split_tag = "" if split is None else f"_{split}"
+                        X = extract_point_cloud(snapshot, key=key, layer=layer, head=head, split=split)
 
-                    for method in methods:
-                        stem = f"{key}_layer{layer:02d}_{head_tag}_epoch{epoch:06d}_{method}"
-                        out_path = out_dir / f"{stem}.npz"
-                        written.append(out_path)
-                        if out_path.exists() and not overwrite:
-                            continue
+                        for method in methods:
+                            stem = f"{key}_{layer_tag}_{head_tag}{split_tag}_epoch{epoch:06d}_{method}"
+                            out_path = out_dir / f"{stem}.npz"
+                            written.append(out_path)
+                            if out_path.exists() and not overwrite:
+                                continue
 
-                        item_seed = derive_seed(seed, key, layer, head_tag, epoch, method)
-                        kwargs = method_kwargs.get(method)
-                        if n_components == "auto":
-                            result = auto_reduce(
-                                X, method=method, id_methods=id_methods, id_max_samples=id_max_samples,
-                                component_agg=component_agg, embedding_bound=embedding_bound,
-                                component_margin=component_margin, backend=backend,
-                                deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
-                            )
-                        else:
-                            result = reduce(
-                                X, method=method, n_components=n_components, backend=backend,
-                                deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
-                            )
+                            item_seed = derive_seed(seed, key, layer, head_tag, split, epoch, method)
+                            kwargs = method_kwargs.get(method)
+                            if n_components == "auto":
+                                result = auto_reduce(
+                                    X, method=method, id_methods=id_methods, id_max_samples=id_max_samples,
+                                    component_agg=component_agg, embedding_bound=embedding_bound,
+                                    component_margin=component_margin, backend=backend,
+                                    deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
+                                )
+                            else:
+                                result = reduce(
+                                    X, method=method, n_components=n_components, backend=backend,
+                                    deterministic=deterministic, seed=item_seed, method_kwargs=kwargs,
+                                )
 
-                        extra = {k: v for k, v in result.items() if k not in ("embedding", "intrinsic_dimension_estimates")}
-                        provenance = build_provenance(
-                            source_run=source_run, epoch=epoch, key=key, layer=layer, head=head_tag, **extra
-                        )
-                        save_kwargs = dict(embedding=result["embedding"], **provenance)
-                        if "intrinsic_dimension_estimates" in result:
-                            # a list of dicts isn't a natural ndarray; keep it as an
-                            # object array via allow_pickle rather than flattening it
-                            # into columns that would collide with the ones above.
-                            save_kwargs["intrinsic_dimension_estimates"] = np.array(
-                                result["intrinsic_dimension_estimates"], dtype=object
+                            extra = {k: v for k, v in result.items() if k not in ("embedding", "intrinsic_dimension_estimates")}
+                            provenance = build_provenance(
+                                source_run=source_run, epoch=epoch, key=key, layer=layer,
+                                head=head_tag, split=split, **extra
                             )
-                        np.savez(out_path, **save_kwargs)
+                            save_kwargs = dict(embedding=result["embedding"], **provenance)
+                            if "intrinsic_dimension_estimates" in result:
+                                # a list of dicts isn't a natural ndarray; keep it as an
+                                # object array via allow_pickle rather than flattening it
+                                # into columns that would collide with the ones above.
+                                save_kwargs["intrinsic_dimension_estimates"] = np.array(
+                                    result["intrinsic_dimension_estimates"], dtype=object
+                                )
+                            np.savez(out_path, **save_kwargs)
 
     return written

@@ -112,10 +112,15 @@ def extract_point_cloud(
 
     How, for key="blocks" — snapshots from capture="named_blocks" mode:
     `layer` is instead a block *name* (str — "embedding", "decoder_0", ...,
-    "linear"; see nn._common._named_blocks), and `split` selects "train" or
-    "test" (required — there is no default, unlike `head`, since unlike
-    "concatenate all heads" there is no sensible way to combine train and
-    test into one point cloud). Each block's activation is already
+    "linear"; see nn._common._named_blocks). `split` selects "train",
+    "test", or "both" (required — there is no default, unlike `head`).
+    "both" stacks test rows then train rows into one point cloud — same
+    row order as BRACIS-2026/code/pipeline/MP-MLE_UMAP-Reduction.py's
+    `pd.concat([df_test, df_train], axis=0)`, which is what the published
+    pipeline actually analyzed (one combined latent-space topology, not two
+    separate train/test ones); "train"/"test" alone are also available for
+    anyone who wants to look at the splits independently, which the
+    published pipeline never did. Each block's activation is already
     (n_samples, features) — already reduced to one token position by
     ActivationRecorder, not (n_samples, seq_len, features) — so no
     reshaping happens beyond the dtype/device conversion; `head` is ignored
@@ -129,10 +134,11 @@ def extract_point_cloud(
     :param head: which attention head (0-indexed); ignored for
                  "ffn_activations"/"blocks"; None (default) concatenates all
                  heads for "attentions"/"values".
-    :param split: "train" or "test" — required (and only used) for key="blocks".
+    :param split: "train", "test", or "both" — required (and only used)
+                  for key="blocks".
     :returns: float32 ndarray, shape (n_samples, n_features).
     :raises KeyError: if `key` isn't one of the four above.
-    :raises ValueError: if key="blocks" without `split`.
+    :raises ValueError: if key="blocks" with a missing/unrecognized `split`.
     :raises IndexError: if `layer`/`head` is out of range for this snapshot.
     """
     if key == "ffn_activations":
@@ -141,9 +147,10 @@ def extract_point_cloud(
         heads = snapshot[key][layer]
         tensor = heads[head] if head is not None else torch.cat(heads, dim=-1)
     elif key == "blocks":
-        if split is None:
-            raise ValueError("key='blocks' requires split='train' or split='test'")
-        tensor = snapshot["blocks"][layer][split]
+        if split not in ("train", "test", "both"):
+            raise ValueError(f"key='blocks' requires split='train', 'test', or 'both', got {split!r}")
+        block = snapshot["blocks"][layer]
+        tensor = torch.cat([block["test"], block["train"]], dim=0) if split == "both" else block[split]
     else:
         raise KeyError(f"key must be 'attentions', 'values', 'ffn_activations', or 'blocks', got {key!r}")
 
