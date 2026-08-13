@@ -86,17 +86,22 @@ CURATED_BETTI_BLOCKS = ["decoder_0", "linear"]
 K_TOPOLOGY_DEFAULT = 31
 PERCENTILE_DEFAULT = 95.0
 
-# k for MLE/UMAP: the original pipeline script's own default is 15, while
-# article/_archive/v2/sections_v2/methodology_v2.tex (an earlier draft)
-# describes k=10 -- still unresolved (see BRACIS_DIR/code/README.md), kept
-# here as the script's own default; override with --k_mle if you determine
-# which was actually used for the published runs before finalizing
-# sections_v3/methodology_v3.tex.
-K_MLE_DEFAULT = 15
+# k for MLE (intrinsic-dimension estimation / UMAP's n_neighbors): the
+# original pipeline script's own default was 15, but article/sections_v3/
+# related-work_v3.tex Sec. "TDA Pipeline" states k=10 explicitly ("the MLE
+# of Levina and Bickel ... k = 10 nearest neighbors") -- confirmed as the
+# correct, published value; the pipeline script's k=15 default was simply
+# never actually used for the published runs.
+K_MLE_DEFAULT = 10
 
-# random_seed / weight_decay fixed by the original notebook/pipeline.
+# random_seed fixed by the original notebook/pipeline.
 RANDOM_SEED_DEFAULT = 24
-WEIGHT_DECAY_DEFAULT = 0.1
+
+# weight decay: article/sections_v3/related-work_v3.tex Sec. "Model
+# Architecture and Training" states "weight decay lambda = 1.0" explicitly
+# -- confirmed as the correct, published value; the pipeline script's 0.1
+# default was simply never actually used for the published runs.
+WEIGHT_DECAY_DEFAULT = 1.0
 
 # The one published condition with a second, log-x-axis variant (see
 # article/plots/sum/DE-evolution_betti_acc_reduced_decoder_0_activations-
@@ -275,8 +280,8 @@ def main():
     parser.add_argument("--gpu", type=int, default=0,
                          help="Forwarded to run_train.py --gpu (0=first GPU/MPS available, -1=force CPU).")
     parser.add_argument("--k_mle", type=int, default=K_MLE_DEFAULT,
-                         help=f"k for MLE/UMAP (script default: {K_MLE_DEFAULT}; an earlier methodology draft "
-                              f"mentions k=10 -- confirm before treating either as final)")
+                         help=f"k for MLE/UMAP (default: {K_MLE_DEFAULT}, confirmed from article/sections_v3/"
+                              f"related-work_v3.tex)")
     parser.add_argument("--k_topology", type=int, default=K_TOPOLOGY_DEFAULT,
                          help="k for the dynamic-epsilon graph (confirmed=31 from already-published filenames)")
     parser.add_argument("--percentile", type=float, default=PERCENTILE_DEFAULT)

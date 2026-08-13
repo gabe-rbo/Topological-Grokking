@@ -104,23 +104,27 @@ After all requested conditions:
    at compile time — install it first, e.g. `brew install inkscape` on
    macOS, if `main_v3.pdf` fails with a `..._svg-tex.pdf is missing` error).
 
-## Known hyperparameter divergence (unresolved)
+## Hyperparameters
 
-`_archive/original-pipeline/`'s code and `article/_archive/v2/sections_v2/methodology_v2.tex`
-(an earlier draft — the current `sections_v3/methodology_v3.tex` is empty)
-disagree on two values:
+`sections_v3/methodology_v3.tex` is empty, but the values it would
+describe are stated explicitly in `article/sections_v3/related-work_v3.tex`
+(Sec. "Model Architecture and Training" / "TDA Pipeline") and confirmed
+correct — `reproduce.py`/`run_train.py`/`run_analysis.py` default to
+these:
 
-- **Weight decay**: the code fixes `weight_decay = 0.1`; the v2 draft text
-  says lambda = 1.0.
-- **k (MLE)**: the code's default is `k=15`; the v2 draft text says k=10.
+- **Weight decay**: `lambda = 1.0` (AdamW).
+- **Batch size**: full-batch gradient descent (`batchsize=-1` in grok's
+  convention — add_args()'s own default, `0`, means "auto-calculate",
+  *not* full-batch, so this is passed explicitly).
+- **k (MLE)**: `k = 10` nearest neighbors, for intrinsic-dimension
+  estimation and as UMAP's `n_neighbors`.
+- **k (topology) / percentile**: `k = 31`, 95th percentile, for the
+  dynamic-epsilon graph — also matches the filenames already published in
+  `article/plots/` (`"k31-95percentil"`).
 
-`k=31` and percentile=95 for the persistent-homology stage **are
-confirmed** — they match the filenames already published in
-`article/plots/` (`"k31-95percentil"`).
-
-`reproduce.py --k_mle`/`--weight_decay` default to the code's values (15,
-0.1) but are adjustable; confirm which was actually used for the published
-runs before finalizing `sections_v3/methodology_v3.tex`.
+`_archive/original-pipeline/`'s own scripts used different defaults for
+weight decay and k (MLE) than what was actually published — see that
+directory's README for what to trust instead (this file, not that code).
 
 ## Where the raw data lives
 
