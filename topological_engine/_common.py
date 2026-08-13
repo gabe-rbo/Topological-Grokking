@@ -31,7 +31,7 @@ ACTIVATIONS_ROOT = REPO_ROOT / "nn" / "activations"
 # that produces it, mirroring nn/activations/ living inside nn/.
 RESULTS_ROOT = PACKAGE_DIR / "results"
 
-ActivationKey = str  # "attentions" | "values" | "ffn_activations"
+ActivationKey = str  # "attentions" | "values" | "ffn_activations" | "blocks"
 
 
 def list_source_runs() -> List[str]:
@@ -86,35 +86,59 @@ def load_activation_snapshot(source_run: str, epoch: int) -> Dict[str, Any]:
 def extract_point_cloud(
     snapshot: Dict[str, Any],
     key: ActivationKey = "ffn_activations",
-    layer: int = 0,
+    layer: Any = 0,
     head: Optional[int] = None,
+    split: Optional[str] = None,
 ) -> np.ndarray:
     """
-    Flattens one layer's activations from a snapshot dict into a plain
-    (n_samples, n_features) point cloud — the common input shape every
-    function in this package expects.
+    Flattens one layer's (or block's) activations from a snapshot dict into
+    a plain (n_samples, n_features) point cloud — the common input shape
+    every function in this package expects.
 
-    How: "ffn_activations" is already (n_samples, seq_len, d_ff) per layer,
-    so this just reshapes it. "attentions"/"values" are nested
+    How, for key in ("ffn_activations", "attentions", "values") — snapshots
+    from nn._common.ActivationRecorder's default capture="ffn" mode:
+    "ffn_activations" is already (n_samples, seq_len, d_ff) per layer, so
+    this just reshapes it. "attentions"/"values" are nested
     List[layer][head] of (n_samples, seq_len, seq_len_or_d_key) tensors
     (see grok.transformer.Transformer.forward); this selects the requested
-    layer, then either one head (`head` given) or concatenates every head
-    along the feature axis (`head=None` — the full per-layer representation).
-    Either way, every dimension after the sample axis is flattened into one
-    feature vector per sample — e.g. a (n, seq_len, d_ff) tensor becomes
-    (n, seq_len * d_ff). This mirrors treating "one equation" as "one point",
-    which is the natural unit for topological analysis of these datasets
-    (grok's ArithmeticDataset has exactly one fixed-length token sequence
-    per equation).
+    layer (an int), then either one head (`head` given) or concatenates
+    every head along the feature axis (`head=None` — the full per-layer
+    representation). Either way, every dimension after the sample axis is
+    flattened into one feature vector per sample — e.g. a (n, seq_len, d_ff)
+    tensor becomes (n, seq_len * d_ff). This mirrors treating "one equation"
+    as "one point", which is the natural unit for topological analysis of
+    these datasets (grok's ArithmeticDataset has exactly one fixed-length
+    token sequence per equation).
+
+    How, for key="blocks" — snapshots from capture="named_blocks" mode:
+    `layer` is instead a block *name* (str — "embedding", "decoder_0", ...,
+    "linear"; see nn._common._named_blocks). `split` selects "train",
+    "test", or "both" (required — there is no default, unlike `head`).
+    "both" stacks test rows then train rows into one point cloud — same
+    row order as BRACIS-2026/code/pipeline/MP-MLE_UMAP-Reduction.py's
+    `pd.concat([df_test, df_train], axis=0)`, which is what the published
+    pipeline actually analyzed (one combined latent-space topology, not two
+    separate train/test ones); "train"/"test" alone are also available for
+    anyone who wants to look at the splits independently, which the
+    published pipeline never did. Each block's activation is already
+    (n_samples, features) — already reduced to one token position by
+    ActivationRecorder, not (n_samples, seq_len, features) — so no
+    reshaping happens beyond the dtype/device conversion; `head` is ignored
+    (named blocks have no heads).
 
     :param snapshot: a dict from load_activation_snapshot.
-    :param key: "attentions", "values", or "ffn_activations".
-    :param layer: which decoder block (0-indexed).
+    :param key: "attentions", "values", "ffn_activations", or "blocks".
+    :param layer: which decoder block (0-indexed int) for "attentions"/
+                  "values"/"ffn_activations"; which block *name* (str) for
+                  "blocks".
     :param head: which attention head (0-indexed); ignored for
-                 "ffn_activations" (which has no heads); None (default)
-                 concatenates all heads for "attentions"/"values".
+                 "ffn_activations"/"blocks"; None (default) concatenates all
+                 heads for "attentions"/"values".
+    :param split: "train", "test", or "both" — required (and only used)
+                  for key="blocks".
     :returns: float32 ndarray, shape (n_samples, n_features).
-    :raises KeyError: if `key` isn't one of the three above.
+    :raises KeyError: if `key` isn't one of the four above.
+    :raises ValueError: if key="blocks" with a missing/unrecognized `split`.
     :raises IndexError: if `layer`/`head` is out of range for this snapshot.
     """
     if key == "ffn_activations":
@@ -122,8 +146,13 @@ def extract_point_cloud(
     elif key in ("attentions", "values"):
         heads = snapshot[key][layer]
         tensor = heads[head] if head is not None else torch.cat(heads, dim=-1)
+    elif key == "blocks":
+        if split not in ("train", "test", "both"):
+            raise ValueError(f"key='blocks' requires split='train', 'test', or 'both', got {split!r}")
+        block = snapshot["blocks"][layer]
+        tensor = torch.cat([block["test"], block["train"]], dim=0) if split == "both" else block[split]
     else:
-        raise KeyError(f"key must be 'attentions', 'values', or 'ffn_activations', got {key!r}")
+        raise KeyError(f"key must be 'attentions', 'values', 'ffn_activations', or 'blocks', got {key!r}")
 
     arr = tensor.detach().cpu().numpy().astype(np.float32, copy=False)
     n_samples = arr.shape[0]

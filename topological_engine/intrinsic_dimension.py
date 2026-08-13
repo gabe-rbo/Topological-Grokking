@@ -204,9 +204,10 @@ def estimate_intrinsic_dimension(
 def process_run(
     source_run: str,
     keys: Sequence[ActivationKey] = ("ffn_activations",),
-    layers: Optional[Sequence[int]] = None,
+    layers: Optional[Sequence[Any]] = None,
     epochs: Optional[Sequence[int]] = None,
     heads: Optional[Sequence[Optional[int]]] = (None,),
+    splits: Sequence[str] = ("both",),
     methods: Union[str, Sequence[str]] = "all",
     max_samples: Optional[int] = 2000,
     seed: int = 0,
@@ -215,8 +216,8 @@ def process_run(
 ) -> List[Path]:
     """
     Batch-estimates intrinsic dimension across every (activation key,
-    layer, head, epoch) combination for one nn/activations/ run, writing
-    one Parquet file per epoch to
+    layer, head, split, epoch) combination for one nn/activations/ run,
+    writing one Parquet file per epoch to
     topological_engine/results/<source_run>/intrinsic_dimension/.
 
     One file per epoch (not one file per item, and not one single
@@ -233,15 +234,25 @@ def process_run(
 
     :param source_run: an nn/activations/ run directory name.
     :param keys: which activation tensors to analyze — any of
-                 "attentions", "values", "ffn_activations".
-    :param layers: which decoder-block layers to process; None processes
-                   every layer present in each snapshot.
+                 "attentions", "values", "ffn_activations", "blocks".
+    :param layers: which decoder-block layers to process (ints, for
+                   "attentions"/"values"/"ffn_activations") or which block
+                   names to process (strs, e.g. "decoder_0", for "blocks");
+                   None processes every layer present in each snapshot
+                   (assumes "ffn_activations" is present to count them —
+                   pass an explicit list of block names for "blocks"-only
+                   snapshots, which don't have that key).
     :param epochs: which epochs to process; None processes every epoch
                    saved for this run.
     :param heads: which attention heads to process for "attentions"/
-                  "values" (ignored for "ffn_activations"); None in this
-                  sequence means "concatenate all heads". Default (None,)
-                  processes only the all-heads-concatenated view.
+                  "values" (ignored otherwise); None in this sequence means
+                  "concatenate all heads". Default (None,) processes only
+                  the all-heads-concatenated view.
+    :param splits: which split(s) to process for "blocks" (ignored
+                   otherwise) — any of "train", "test", "both" (test+train
+                   stacked into one point cloud — see extract_point_cloud).
+                   Default ("both",) matches what the published pipeline
+                   analyzed.
     :param methods: forwarded to estimate_intrinsic_dimension per item.
     :param max_samples: forwarded to estimate_intrinsic_dimension per item.
     :param seed: base seed; each item derives its own distinct-but-
@@ -272,19 +283,21 @@ def process_run(
         rows: List[Dict[str, Any]] = []
         for key in keys:
             this_heads = heads if key in ("attentions", "values") else (None,)
+            this_splits = splits if key == "blocks" else (None,)
             for layer in resolved_layers:
                 for head in this_heads:
-                    X = extract_point_cloud(snapshot, key=key, layer=layer, head=head)
-                    head_tag = "allheads" if head is None else f"head{head:02d}"
-                    item_seed = derive_seed(seed, key, layer, head_tag, epoch)
-                    provenance = build_provenance(
-                        source_run=source_run, epoch=epoch, key=key, layer=layer,
-                        head=head_tag, seed=item_seed,
-                    )
-                    for row in estimate_intrinsic_dimension(
-                        X, methods=methods, max_samples=max_samples, seed=item_seed, method_kwargs=method_kwargs
-                    ):
-                        rows.append({**provenance, **row})
+                    for split in this_splits:
+                        X = extract_point_cloud(snapshot, key=key, layer=layer, head=head, split=split)
+                        head_tag = "allheads" if head is None else f"head{head:02d}"
+                        item_seed = derive_seed(seed, key, layer, head_tag, split, epoch)
+                        provenance = build_provenance(
+                            source_run=source_run, epoch=epoch, key=key, layer=layer,
+                            head=head_tag, split=split, seed=item_seed,
+                        )
+                        for row in estimate_intrinsic_dimension(
+                            X, methods=methods, max_samples=max_samples, seed=item_seed, method_kwargs=method_kwargs
+                        ):
+                            rows.append({**provenance, **row})
 
         pq.write_table(pa.Table.from_pylist(rows), out_path)
 

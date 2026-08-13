@@ -1,37 +1,38 @@
-# BRACIS — Apresentação
+# BRACIS-2026 — Presentation
 
-Estrutura para a apresentação oral (o artigo é candidato a best paper e
-recebeu a maior nota da conferência).
+Structure for the oral presentation (the article is a best-paper candidate
+and received the conference's highest score).
 
-- `slides/` — arquivo(s) de slides (ex.: .key / .pptx / .pdf exportado).
-- `assets/` — figuras usadas nos slides. Pode reaproveitar os SVGs de
-  `../article/plots/` (prod/ e sum/) e as imagens conceituais de
+- `slides/` — slide file(s) (e.g. .key / .pptx / exported .pdf).
+- `assets/` — figures used in the slides. Can reuse the SVGs from
+  `../article/plots/` (`prod/` and `sum/`) and the conceptual images from
   `../article/imgs/`.
 
-## Outline sugerido (~12-15 min)
+## Suggested outline (~12-15 min)
 
-1. **Motivação** — o que é grokking (memorização → generalização súbita) e a
-   lacuna: explicações mecanicistas existem, mas pouco se sabe sobre a
-   estrutura *global* (topológica) do espaço de representações.
-2. **Ideia central** — usar Topological Data Analysis (dimensão intrínseca +
-   homologia persistente) para caracterizar essa transição.
-3. **Pipeline** — treino do transformer em Z_97 (soma/produto modular) →
-   extração de ativações → estimativa de dimensão intrínseca (MLE) → UMAP →
-   complexo simplicial (k=31, percentil 95) → homologia persistente (GUDHI).
-4. **Hipóteses (H1-H3)**
-   - H1: estabilização dos números de Betti em condições generalizantes.
-   - H2: direcionalidade por camada (β₀ cai no decoder, sobe na camada
-     linear).
-   - H3: redução da dimensão intrínseca acompanha generalização bem-sucedida.
-5. **Resultados** — soma modular (10/15/20/30%) e produto modular
-   (15/20/30%): evolução de Betti e de dimensão intrínseca, condições
-   generalizantes vs. não-generalizantes.
-6. **Interpretação** — grokking como uma "transição de fase topológica" para
-   manifolds mais simples e organizados.
-7. **Limitações e próximos passos** — sensibilidade a k/percentil (trabalho
-   futuro), ausência de testes estatísticos formais, e os experimentos novos
-   em andamento (reparo de homologia via Tangential Delaunay, autoencoders
-   topológicos) — ver `../code/README.md`.
-8. **Conclusão / perguntas**.
+1. **Motivation** — what grokking is (memorization -> sudden
+   generalization) and the gap: mechanistic explanations exist, but little
+   is known about the *global* (topological) structure of the
+   representation space.
+2. **Core idea** — use Topological Data Analysis (intrinsic dimension +
+   persistent homology) to characterize that transition.
+3. **Pipeline** — train the transformer on Z_97 (modular sum/product) ->
+   extract activations -> intrinsic-dimension estimation (MLE) -> UMAP ->
+   simplicial complex (k=31, 95th percentile) -> persistent homology (GUDHI).
+4. **Hypotheses (H1-H3)**
+   - H1: Betti numbers stabilize under generalizing conditions.
+   - H2: per-layer directionality (beta_0 drops in the decoder, rises in
+     the linear layer).
+   - H3: intrinsic-dimension reduction accompanies successful generalization.
+5. **Results** — modular sum (10/15/20/30%) and modular product
+   (15/20/30%): Betti and intrinsic-dimension evolution, generalizing vs.
+   non-generalizing conditions.
+6. **Interpretation** — grokking as a "topological phase transition"
+   toward simpler, more organized manifolds.
+7. **Limitations and next steps** — sensitivity to k/percentile (future
+   work), absence of formal statistical tests, and the new experiments
+   underway (Tangential Delaunay homology repair, topological
+   autoencoders) — see `../code/README.md`.
+8. **Conclusion / questions**.
 
-Ajuste a duração e o nível de detalhe conforme o tempo de slot da BRACIS.
+Adjust duration and level of detail to BRACIS's actual slot length.

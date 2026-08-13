@@ -1,168 +1,131 @@
-# BRACIS-2026 — Código de Reprodutibilidade
+# BRACIS-2026 — Reproducibility code
 
-Este diretório reúne o código para reproduzir os resultados publicados no
-artigo "Characterizing Grokking via Topological Data Analysis in a Small
-Transformer Model" (BRACIS).
+This directory reproduces the results published in "Characterizing
+Grokking via Topological Data Analysis in a Small Transformer Model"
+(BRACIS-2026) as one configured instance of the general framework at the
+repository root (`data/`, `nn/`, `topological_engine/`), rather than as a
+separate, self-contained codebase — this directory holds the paper's
+specific configuration (hyperparameters, which figures got curated) and a
+handful of thin orchestration scripts, not a duplicate implementation of
+the methodology itself.
 
-## Estrutura
+## Files
 
-- `pipeline/` — os scripts do pipeline (originais + conversões):
-  - `train.py` — **script chamável via terminal**, conversão 1:1 de
-    `Training.ipynb` (o notebook é mantido para referência histórica, mas
-    `train.py` é a forma recomendada de rodar o treino a partir de agora).
-    Treina o transformer decoder-only em Z₉₇ e dumpa ativações por época.
-    Parametrizado via CLI (`--math_operator`, `--train_data_pct`,
-    `--random_seed`, `--weight_decay`, `--out_dir`, etc.) usando os mesmos
-    nomes/defaults de `grok.training.add_args()`. A lógica de treino, o
-    modelo e a forma de extração das ativações **não foram alterados** em
-    relação ao notebook original. Importa explicitamente o `grok`
-    **modernizado** de `openai-grok/` (raiz do repositório) — ver seção
-    "Qual `grok`?" abaixo.
-  - `Training.ipynb` — notebook original, mantido para referência/histórico.
-  - `MP-MLE_UMAP-Reduction.py` — dimensão intrínseca (MLE) + UMAP. Cópia fiel
-    do script real usado no MacStudio (comparado linha a linha com o
-    original em `Codigos_MacStudio/`).
-  - `MP-DE-LatentSpaceTopology.py` — homologia persistente / números de Betti
-    (GUDHI + QuickMapper via Julia). Cópia fiel do script real: além do HTML
-    interativo (Plotly), gera as figuras estáticas de Betti/acurácia em SVG
-    (matplotlib, eixo duplo, estilo `tab10`) diretamente na própria pasta de
-    saída (`<predictions_folder>/DE/<k>_neighbors/<percentil>percentil/`).
-    `reproduce.py` copia as figuras curadas (decoder_0, linear) de lá para
-    `article/plots/{sum,prod}/`, aplicando o prefixo/sufixo publicado.
-  - `aggregate_intrinsic_dimension.py` — reescrito a partir da lógica real de
-    `IntrinsicDimensionAnalysis.ipynb` (matplotlib, estilo
-    `seaborn-v0_8-whitegrid`). Agrega `intrinsic_dimensions_log.csv` de
-    todas as frações de treino (10/15/20/25/30%) num único gráfico por
-    camada. **Atenção:** as convenções de pasta/nome de arquivo são
-    diferentes por tarefa (herdadas do notebook original — ver docstring do
-    próprio script e a seção "Convenção de pastas" abaixo).
-  - `optional_analysis/` — `NeuronFunctions.ipynb` e
-    `PhaseTransitionDetector.ipynb`, portados de `Codigos_MacStudio/` como
-    referência opcional (análises exploratórias adicionais que não alimentam
-    nenhuma figura publicada no artigo, mas podem ser úteis para os
-    experimentos que estão sendo incrementados). Não fazem parte do
-    pipeline automatizado por `reproduce.py`.
-  - `ORIGINAL_README.md` — README original do repositório de onde os
-    scripts vieram.
-
-- `reproduce.py` — **recria o artigo do zero**: treino → dimensão
-  intrínseca/UMAP → homologia persistente/figuras → agregação → PDF.
-  Veja `python reproduce.py --help` e leia o docstring no topo do arquivo
-  antes de rodar — o treino completo das 10 condições do artigo (2 tarefas
-  × 5 frações) é uma operação de dias de GPU/MPS, não de minutos.
+- `reproduce.py` — the entry point. Orchestrates all 10 experimental
+  conditions (2 tasks — modular sum `+`, modular product `*` — x 5
+  training-data fractions — 10/15/20/25/30%) through four stages:
+  `train`, `analyze`, `figures`, `paper`. Read its module docstring (or
+  `python reproduce.py --help`) before running anything — training the
+  full sweep from scratch is a task of days of GPU/MPS time, not minutes.
 
   ```bash
-  # ver o plano de execução sem rodar nada
+  # see the full execution plan without running anything
   python reproduce.py --dry-run
 
-  # reproduzir tudo (demorado — rode em background)
-  nohup python reproduce.py --stages all > reproduce.log 2>&1 &
+  # reproduce everything (training included) -- slow, ideal for nohup/background
+  python reproduce.py --stages all
 
-  # só recompilar o PDF a partir do que já existe
+  # only recompile the PDF from whatever data/figures already exist
   python reproduce.py --stages paper
 
-  # teste rápido do encadeamento do pipeline (NÃO reproduz os resultados reais)
+  # run just the sum-20% condition (useful for exercising the pipeline mechanically)
+  python reproduce.py --conditions sum:20 --stages all
+
+  # quick smoke test (does NOT reproduce the article's real results, only
+  # validates that the pipeline runs end to end); figures land in
+  # code/runs/smoke_test_plots/, never article/plots/
   python reproduce.py --conditions sum:20 --smoke-test
   ```
 
-## Qual `grok`?
+- `run_train.py` — trains one (task, percentage) condition via
+  `nn.relu.train(activation_capture="named_blocks", track_accuracy=True, ...)`
+  (see `nn/_common.py`'s `ActivationRecorder` for what that capture mode
+  saves: embedding/decoder_0/decoder_1/linear activations at the `"="`
+  token, train and test together, plus per-epoch accuracy). Invoked by
+  `reproduce.py` as its own subprocess per condition — not because of any
+  ordering hazard (that's `run_analysis.py`, see below), but so a
+  multi-day, multi-condition sweep is many short-lived processes rather
+  than one whose accumulated state (and risk of losing everything to one
+  crash) grows across the whole sweep.
 
-Existem duas versões do fork `openai-grok` neste projeto:
+- `run_analysis.py` — runs `topological_engine.intrinsic_dimension`,
+  `.dimensionality_reduction`, and `.persistent_homology`'s `process_run()`
+  functions against one condition's saved activations. **Imports
+  `juliacall` as its literal first import**, before anything else —
+  `persistent_homology`'s QuickMapper step needs Julia, and Julia must be
+  initialized before `torch` is ever imported in the process or risk a
+  segfault (see `topological_engine/persistent_homology.py`'s module
+  docstring). This is also why it's a separate script/subprocess from
+  `run_train.py` rather than folded into one process: `run_train.py`
+  necessarily imports `torch` first (to train), so the two can never
+  safely share a process.
 
-- `Codigos_MacStudio/TopologicalGrokking.zip` contém a versão **pristine**
-  que rodou originalmente no MacStudio (ambiente Python de 2022).
-- `openai-grok/` na raiz do repositório é uma versão **modernizada** — os
-  mesmos modelo/matemática/lógica de treino, com patches de compatibilidade
-  para PyTorch Lightning atual e suporte a MPS (Apple Silicon). Cada patch
-  está comentado com `# compat:` em `openai-grok/grok/training.py`.
+- `paper_figures.py` — the paper's curated figure styles (exact ports of
+  the archived pipeline's matplotlib styling — see below), reading
+  `topological_engine`'s saved results. Called directly by
+  `reproduce.py`'s figures stage (no subprocess needed — matplotlib/pandas
+  only, no `juliacall`/`torch` ordering concern here).
 
-Por decisão explícita do autor, `train.py` roda contra a versão
-**modernizada** (`openai-grok/`) — ele insere essa pasta no início do
-`sys.path` antes de importar `grok`, e imprime de onde o `grok` foi
-efetivamente carregado ao iniciar, para deixar isso auditável.
+- `_archive/original-pipeline/` — the frozen scripts that actually
+  produced the published results, kept unmodified as a historical
+  reference; no longer on the active reproduction path. See its own
+  README.md for what's in it and why it's kept.
 
-## Pipeline (ordem de execução, o que `reproduce.py` automatiza)
+## Which `grok`?
 
-Para cada uma das 10 condições (tarefa ∈ {soma `+`, multiplicação `*`} ×
-fração de treino ∈ {10, 15, 20, 25, 30}%):
+`openai-grok/` at the repository root is a git submodule pointing to a
+fork of OpenAI's original `grok` repository (Power et al.), with
+compatibility patches for current `pytorch_lightning` and Apple Silicon
+(MPS) — each patch commented `# compat:` in `openai-grok/grok/training.py`.
+`nn/_common.py` imports `grok` from there; no other version of `grok` is
+used anywhere in this pipeline.
 
-1. `train.py` treina o modelo e grava ativações brutas por época em
-   `raw-<sum|prod>_data-predictions-<pct>pct/`.
-2. `MP-MLE_UMAP-Reduction.py` estima a dimensão intrínseca (MLE) e reduz via
-   UMAP → pasta **irmã** `UMAP-<...>-predictions-<pct>pct/` (ver convenção
-   de pastas abaixo).
-3. `MP-DE-LatentSpaceTopology.py` constrói o complexo simplicial (k=31,
-   percentil 95) e computa homologia persistente / números de Betti. As
-   figuras curadas são copiadas para `article/plots/{sum,prod}/` pelo
-   próprio `reproduce.py` logo em seguida.
+## Pipeline (what `reproduce.py` automates, per condition)
 
-Depois de todas as condições:
+1. `run_train.py`: `data.init_data.generate()` builds the (Z_97) dataset,
+   `nn.relu.train()` trains the model and saves activation snapshots +
+   `accuracy.csv` under `nn/activations/bracis_<task>_<pct>pct/`.
+2. `run_analysis.py`: intrinsic dimension (MLE) -> UMAP reduction ->
+   persistent homology (Betti numbers), via `topological_engine`'s
+   `process_run()` functions, saved under
+   `topological_engine/results/bracis_<task>_<pct>pct/`.
 
-4. `aggregate_intrinsic_dimension.py` agrega a dimensão intrínseca de todas
-   as frações num único gráfico por camada, por tarefa.
-5. `reproduce.py` compila `article/main_v3.tex` em PDF (via `latexmk`).
+After all requested conditions:
 
-### Convenção de pastas (herdada do MacStudio)
+3. `reproduce.py`'s figures stage calls `paper_figures.py` directly:
+   intrinsic-dimension-evolution figures (one per block, all four —
+   embedding/decoder_0/decoder_1/linear — one line per percentage) and
+   Betti-numbers-vs-accuracy figures (curated for `decoder_0` and `linear`
+   only, matching what's actually published), written straight into
+   `article/plots/{sum,prod}/` under their already-published filenames.
+4. `reproduce.py`'s paper stage compiles `article/main_v3.tex` via
+   `latexmk -shell-escape` (the `-shell-escape` is needed because the
+   article's figures use the LaTeX `svg` package, which invokes Inkscape
+   at compile time — install it first, e.g. `brew install inkscape` on
+   macOS, if `main_v3.pdf` fails with a `..._svg-tex.pdf is missing` error).
 
-As pastas de saída do UMAP ficam no mesmo nível das pastas `raw-*` (IRMÃS,
-não aninhadas dentro delas), com nomes DIFERENTES por tarefa — assim foram
-rodados os notebooks originais, e preservamos isso para bater exatamente
-com os nomes de arquivo já publicados:
+## Known hyperparameter divergence (unresolved)
 
-- soma: `UMAP-predictions-<PCT>pct/` (sem o infixo `_data`)
-- multiplicação: `UMAP-prod_data-predictions-<PCT>pct/`
+`_archive/original-pipeline/`'s code and `article/_archive/v2/sections_v2/methodology_v2.tex`
+(an earlier draft — the current `sections_v3/methodology_v3.tex` is empty)
+disagree on two values:
 
-### A figura em escala logarítmica
+- **Weight decay**: the code fixes `weight_decay = 0.1`; the v2 draft text
+  says lambda = 1.0.
+- **k (MLE)**: the code's default is `k=15`; the v2 draft text says k=10.
 
-Uma única condição publicada tem uma segunda versão em escala log no eixo
-de épocas: soma, 30% (`..._reduced_decoder_0_activations-30pct-k31-
-95percentil-logscale.svg`). `reproduce.py` roda `MP-DE-LatentSpaceTopology.py`
-duas vezes para essa condição (normal + `--log_scale`) e copia ambos os
-resultados.
+`k=31` and percentile=95 for the persistent-homology stage **are
+confirmed** — they match the filenames already published in
+`article/plots/` (`"k31-95percentil"`).
 
-## ⚠️ Divergências encontradas entre o notebook/código e o texto do artigo
+`reproduce.py --k_mle`/`--weight_decay` default to the code's values (15,
+0.1) but are adjustable; confirm which was actually used for the published
+runs before finalizing `sections_v3/methodology_v3.tex`.
 
-Ao converter o notebook, encontrei dois valores que **o código realmente usa**
-e que divergem do que está descrito em
-`article/_archive/v2/sections_v2/methodology_v2.tex` (rascunho anterior —
-`sections_v3/methodology_v3.tex`, a versão atual, está vazio):
+## Where the raw data lives
 
-- **Weight decay**: o notebook fixa `weight_decay = 0.1`; o texto do
-  rascunho v2 diz λ = 1.0.
-- **k (MLE)**: `MP-MLE_UMAP-Reduction.py` usa default `k=15`; o texto do
-  rascunho v2 diz k=10.
-
-O `k=31` e o percentil 95 usados na etapa de homologia persistente **estão
-confirmados** — batem exatamente com os nomes dos arquivos já publicados em
-`article/plots/` ("k31-95percentil").
-
-Recomendo confirmar esses dois valores (weight decay e k do MLE) contra o
-que foi de fato usado nas rodadas publicadas antes de preencher
-`sections_v3/methodology_v3.tex` — `train.py` e `reproduce.py` usam os
-valores do notebook/código (0.1 e 15) como default, mas ambos são
-ajustáveis via CLI (`--weight_decay`, `--k_mle`).
-
-## Onde estão os dados brutos
-
-Os dumps de ativações/predições por época (~10 GB) não ficam neste
-repositório — ver `Repositórios/TDA-FL/TopologicalGrokking/BRACIS-raw-predictions/{product,sum}/`.
-`reproduce.py` gera novas rodadas em `code/runs/` (configurável via
-`--output_dir`), separado dos dados já publicados.
-
-## `Codigos_MacStudio/`
-
-Continha o backup do código real que rodou no MacStudio e gerou os
-resultados publicados (`TopologicalGrokking.zip`, preservado como está — não
-apague). A pasta `_extracted/` era só um espaço de trabalho temporário para
-eu ler/comparar esse código com o que já existia aqui; depois de mineirado
-por completo (os três scripts do pipeline foram corrigidos com base nela, e
-os dois notebooks úteis-mas-opcionais foram portados para
-`code/pipeline/optional_analysis/`), ela foi movida para
-`Codigos_MacStudio/_to_delete/_extracted_scratch/`. Pode apagar essa pasta
-manualmente quando quiser — o `.zip` original continua intacto ao lado.
-
-## Framework mais recente (experimentos adicionais)
-
-Para os experimentos novos que estão sendo incrementados além do artigo
-publicado, veja o framework modularizado na raiz do repositório
-(`topological_engine/`, `experiments/`, `nn/`, `openai-grok/`, `data/`).
+Per-epoch raw activation/prediction dumps (~10 GB) are not stored in this
+repository. `reproduce.py` writes new runs under `nn/activations/` /
+`topological_engine/results/` at the repository root — separate from
+whatever the original published runs' raw data lived under, wherever that
+archive is kept.

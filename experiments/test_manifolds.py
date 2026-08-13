@@ -31,9 +31,9 @@ def test_manifold(name: str, X: np.ndarray, k: int, expected_chi: int, n_neighbo
     print(f"Euler characteristic: {chi} (Expected: {expected_chi})")
     
     if chi == expected_chi:
-        print("✅ SUCCESS")
+        print("SUCCESS")
     else:
-        print("❌ FAILED")
+        print("FAILED")
 
 if __name__ == "__main__":
     np.random.seed(42)

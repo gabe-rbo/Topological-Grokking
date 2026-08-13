@@ -1,64 +1,81 @@
 # Topological-Grokking
 
-Framework para caracterizar o fenômeno de *grokking* (transição repentina de
-memorização para generalização) via Topological Data Analysis (TDA):
-estimativa de dimensão intrínseca e homologia persistente sobre as ativações
-de um transformer treinado em tarefas de aritmética modular (Z₉₇).
+A framework for characterizing *grokking* (the sudden transition from
+memorization to generalization) through Topological Data Analysis (TDA):
+intrinsic-dimension estimation and persistent homology over the activations
+of a transformer trained on modular-arithmetic tasks (Z_97).
 
-**Status:** artigo submetido à BRACIS — candidato a *best paper*, com a
-maior nota da conferência. Os experimentos estão sendo incrementados para
-extrair resultados adicionais além do que foi publicado.
+**Status:** the BRACIS-2026 article is submitted, a best-paper candidate
+with the conference's highest score. New experiments (e.g. swapping the
+dimensionality-reduction method for a topological autoencoder) are ongoing
+on top of the general framework below.
 
-## Estrutura do repositório
+## Repository structure
 
 ```
-BRACIS/                  → tudo relacionado ao artigo e à sua reprodução
-  article/                 texto do artigo (LaTeX), versão atual: main_v3.tex
-  code/pipeline/            código que gerou os resultados publicados
-  presentation/             apresentação oral / outline dos slides
+topological_engine/    -> the general framework: intrinsic dimension,
+                           dimensionality reduction (UMAP/PaCMAP/TriMap),
+                           persistent homology (Betti numbers), topological
+                           autoencoders, grand tour visualization
+nn/                     -> transformer training (ReLU/GELU) and activation
+                           capture, feeding topological_engine/
+data/                   -> modular-arithmetic dataset generation
+experiments/            -> exploratory research code built on top of
+                           topological_engine/ (Tangential Delaunay complex
+                           repair, manifold/noise tests)
+openai-grok/            -> git submodule: a fork of OpenAI's original grok
+                           repository (Power et al.), with compatibility
+                           patches for current pytorch_lightning and Apple
+                           Silicon (MPS) -- see its README for details
 
-topological_engine/      → framework modularizado (dimensão intrínseca,
-                            autoencoders topológicos, redução de
-                            dimensionalidade, grand tour) — base para os
-                            experimentos novos além do artigo
-experiments/              → experimentos adicionais (Tangential Delaunay,
-                            testes de manifold/ruído)
-nn/                        → modelos e treino (ReLU/GELU) usados pelo
-                            framework modularizado
-openai-grok/               → fork/dependência do repositório grok original
-                            (Power et al.) usado para treinar o transformer
-data/                      → geração dos datasets de aritmética modular
-
-gemini-conversations/, claude-conversations/
-                          → notas/registros de sessões de pesquisa com IA,
-                            mantidas como histórico de decisões de design
-                            (ex.: generalização do reparo de homologia do
-                            Tangential Delaunay, uso de autoencoders)
+BRACIS-2026/            -> the BRACIS-2026 paper's reproducibility package,
+                           one configured instance of the framework above
+                           (not a separate codebase) -- see its own
+                           code/README.md for the full pipeline
+  article/                the article's LaTeX source; current version:
+                           main_v3.tex
+  code/                   reproduce.py + run_train.py + run_analysis.py +
+                           paper_figures.py -- the paper's exact
+                           configuration (hyperparameters, curated figures),
+                           calling into topological_engine/nn/data
+  presentation/           oral presentation outline / slides
 ```
 
-## Onde estão os dados
+Private, local-only research notes (`claude-conversations/`,
+`gemini-conversations/`, `experiments_and_results.txt`) are gitignored --
+present on disk for whoever is developing here, never published.
 
-Os dumps de ativações brutas por época (dezenas de GB) não ficam neste
-repositório. Eles vivem em:
+## Setup
 
-- `Repositórios/TDA-FL/TopologicalGrokking/BRACIS-raw-predictions/{product,sum}/`
-  — os dumps completos (10/15/20/30% de treino) que geraram os resultados do
-  artigo (movidos de `FutureLab/Artigos/An Investigation on the Topology of
-  Grokking/`).
-- `Repositórios/TDA-FL/TopologicalGrokking/predictions-50pct*` — um
-  experimento exploratório anterior (50% de treino, escala menor).
+```bash
+git clone --recurse-submodules <this repo's URL>
+# or, if already cloned without --recurse-submodules:
+git submodule update --init
 
-Veja `BRACIS-2026/code/README.md` para o pipeline completo de reprodução.
+python -m venv .venv && source .venv/bin/activate
+pip install -e openai-grok
+pip install -r topological_engine/requirements.txt
+```
 
-## Reproduzindo os resultados do artigo
+## Where the raw data lives
 
-Ver `BRACIS-2026/code/README.md`.
+Per-epoch raw activation dumps (tens of GB) are not stored in this
+repository. `reproduce.py` regenerates everything from scratch into
+`BRACIS-2026/code/runs/` (`nn/activations/` for the underlying framework
+runs); see `BRACIS-2026/code/README.md`.
 
-## Pendências conhecidas
+## Reproducing the article's results
 
-- `BRACIS-2026/article/sections_v3/methodology_v3.tex` está vazio — precisa ser
-  preenchido antes de recompilar `main_v3.tex` (ver
+See `BRACIS-2026/code/README.md`.
+
+## Known pending items
+
+- `BRACIS-2026/article/sections_v3/methodology_v3.tex` is empty -- needs to
+  be filled in before the PDF's Methodology section is complete (see
   `BRACIS-2026/article/README.md`).
-- O repositório Git ainda não teve nenhum commit (por pedido explícito,
-  a organização foi feita sem commitar — revisar e commitar quando estiver
-  pronto).
+- Two hyperparameters have an unresolved divergence between the code and an
+  earlier draft of the methodology text (weight decay, MLE's k) -- see
+  `BRACIS-2026/code/README.md` for specifics; confirm against the actual
+  published runs before finalizing `methodology_v3.tex`.
+- No `LICENSE` file yet, though the repository has a public GitHub remote --
+  worth adding before making it public.

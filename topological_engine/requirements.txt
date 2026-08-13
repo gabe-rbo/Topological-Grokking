@@ -45,3 +45,15 @@ mlx-vis==0.7.0                # Apple Silicon Metal backend for umap/pacmap/trim
 # device to pin/verify a version against. dimensionality_reduction.py
 # imports it lazily and only on a CUDA machine; install it yourself if you
 # have one.
+
+# persistent_homology.py
+gudhi==3.13.0                 # SimplexTree construction + betti_numbers()
+plotly==6.9.0                  # save_evolution_widget_html's interactive export
+juliacall==0.9.35              # QuickMapper graph simplification (simplify=True,
+                              # the default) — provisions its own Julia runtime on
+                              # first use (one-time ~225MB download). MUST be
+                              # imported before torch in the process — see this
+                              # module's docstring ("IMPORTANT: juliacall MUST be
+                              # imported before torch") — or risk a segfault
+                              # (github.com/pytorch/pytorch/issues/78829). Pass
+                              # simplify=False to avoid this dependency entirely.
