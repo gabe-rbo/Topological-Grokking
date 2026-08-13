@@ -48,6 +48,7 @@ experiments/results/
 *.bbl
 *.blg
 BRACIS-2026/article/main_v3.pdf
+BRACIS-2026/article/svg-inkscape/
 
 # Scratch output from reproduce.py --smoke-test
 BRACIS-2026/code/runs/
