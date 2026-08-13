@@ -6,18 +6,28 @@ Wraps grok.training.TrainableTransformer + pytorch_lightning.Trainer so that:
   * the feed-forward non-linearity is pinned to "relu" or "gelu"
   * custom training/validation datasets can be injected instead of the ones
     grok would otherwise generate from hparams
-  * a snapshot of every layer's activations (attention weights, attention
-    values, and the FFN non-linearity's outputs) is written to disk every
-    N epochs, under nn/activations/<nn_type>_<timestamp>/epoch_XXXXXX.pt
+  * a snapshot of activations is written to disk every N epochs, under
+    nn/activations/<nn_type>_<timestamp>/epoch_XXXXXX.pt, in one of two
+    capture modes (see ActivationRecorder's `capture` parameter):
+      - "ffn" (default): every layer's full-sequence activations —
+        attention weights, attention values, and the FFN non-linearity's
+        outputs — for whichever one of train/val is non-empty.
+      - "named_blocks": embedding/decoder_N/linear's full outputs, reduced
+        to one fixed token position (e.g. "="), for train AND val
+        together — this is the capture BRACIS-2026/'s published pipeline
+        used, generalized here rather than kept as a separate script (see
+        ActivationRecorder's class docstring for the full comparison).
   * optionally (train(process_topology=True)), topological_engine's grand
     tour / intrinsic dimension / dimensionality reduction analyses run
-    against those same snapshots right after training finishes
+    against those same snapshots right after training finishes (capture="ffn"
+    only — the topological_engine modules read the "ffn"-mode format)
 """
 import os
+import re
 from argparse import Namespace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 from pytorch_lightning import Callback, Trainer
@@ -31,6 +41,29 @@ ACTIVATIONS_ROOT = PACKAGE_DIR / "activations"
 RUNS_ROOT = PACKAGE_DIR / "runs"
 
 HParams = Union[Namespace, Dict[str, Any]]
+
+
+def _named_blocks(transformer) -> Dict[str, torch.nn.Module]:
+    """
+    The four *named* top-level blocks of a grok Transformer whose full
+    output (not just the FFN non-linearity's output — see
+    ActivationRecorder's capture="ffn" mode) is meaningful to capture: the
+    embedding layer, each decoder block, and the final linear layer. This
+    is what BRACIS-2026's published pipeline hooked directly (`target_layers`
+    in its train.py), generalized here to however many decoder blocks the
+    model actually has (there were 2 in the paper) rather than hardcoding
+    that count.
+
+    :param transformer: a grok.transformer.Transformer (e.g.
+                         pl_module.transformer).
+    :returns: {"embedding": ..., "decoder_0": ..., ..., "linear": ...},
+              in block order.
+    """
+    blocks: Dict[str, torch.nn.Module] = {"embedding": transformer.embedding}
+    for i, block in enumerate(transformer.decoder.blocks):
+        blocks[f"decoder_{i}"] = block
+    blocks["linear"] = transformer.linear
+    return blocks
 
 
 def _resolve_accelerator(hparams: Namespace) -> Dict[str, Any]:
@@ -191,49 +224,83 @@ class _InjectableTransformer(TrainableTransformer):
 
 class ActivationRecorder(Callback):
     """
-    pytorch_lightning Callback that periodically dumps a snapshot of every
-    layer's activations to disk during training.
+    pytorch_lightning Callback that periodically dumps a snapshot of
+    activations to disk during training, in one of two capture modes.
 
-    How: every `every_n_epochs` real training epochs (a full pass over
-    train_dataset — not gradient steps), runs one forward pass — in eval
-    mode, under torch.no_grad(), on a fixed batch — through
-    pl_module.transformer with save_activations=True, and saves a dict with:
+    capture="ffn" (the default — unchanged from before "named_blocks" was
+    added):
 
-      - "attentions": per-layer, per-head attention weights (what
-                       grok.transformer.Transformer.forward returns as
-                       `attentions` — List[List[Tensor]])
-      - "values":     per-layer, per-head attention values (same shape)
-      - "ffn_activations": per-layer output of the feed-forward
-                            non-linearity itself — what nn.ReLU()/nn.GELU()
-                            actually produced — captured via a forward hook
-                            registered directly on that submodule, since
-                            Transformer.forward doesn't expose it
-      - "epoch", "global_step", "non_linearity": bookkeeping
+      Every `every_n_epochs` real training epochs (a full pass over
+      train_dataset — not gradient steps), runs one forward pass — in eval
+      mode, under torch.no_grad(), on a fixed batch — through
+      pl_module.transformer with save_activations=True, and saves a dict with:
 
-    to <save_dir>/epoch_<N>.pt (zero-padded to 6 digits), one file per
-    snapshot. N=0 is the untrained model (only if save_initial=True); after
-    that, N is the 1-indexed count of completed training epochs.
+        - "attentions": per-layer, per-head attention weights (what
+                         grok.transformer.Transformer.forward returns as
+                         `attentions` — List[List[Tensor]])
+        - "values":     per-layer, per-head attention values (same shape)
+        - "ffn_activations": per-layer output of the feed-forward
+                              non-linearity itself — what nn.ReLU()/nn.GELU()
+                              actually produced — captured via a forward hook
+                              registered directly on that submodule, since
+                              Transformer.forward doesn't expose it
 
-    Which data gets snapshotted: pl_module.val_dataset if it's non-empty,
-    else pl_module.train_dataset — always the *same* one throughout a run
-    (decided once, in setup()). This is a deliberate simplification, not a
-    bug: it does NOT snapshot both train and val activations side by side
-    in the same run (which a grokking study comparing memorization vs.
-    generalization circuits would likely eventually want) — re-run with a
-    swapped train_data/val_data pair, or extend this class, if you need both.
+      Which data gets snapshotted: pl_module.val_dataset if it's non-empty,
+      else pl_module.train_dataset — always the *same* one throughout a run
+      (decided once, in setup()). Deliberately does NOT snapshot both train
+      and val side by side (see capture="named_blocks" if you need that).
 
-    Eval-mode caveat: because the snapshot forward pass runs in eval mode,
-    it's deterministic and excludes whatever dropout/weight_noise would have
-    added during an actual training step at that point — i.e. these are
-    "what this layer computes on this fixed input, given the weights as of
-    epoch N", not literally a recorded activation from a real training step.
-    This is intentional (keeps snapshots comparable across epochs) but worth
-    knowing when interpreting them.
+    capture="named_blocks" (requires `target_token`; generalizes
+    BRACIS-2026/code/pipeline/train.py's MetricsAndPredictionDumper,
+    published-pipeline-specific and CSV-based there, into a reusable engine
+    capability — same math/hooks, different packaging):
 
-    Storage caveat: with no `sample_size` cap, every snapshot contains the
-    *entire* chosen dataset's activations, which can reach tens of MB per
-    epoch for realistic model/dataset sizes — see train()'s
-    activation_sample_size docs.
+      Hooks the four *named* blocks instead (see _named_blocks: embedding,
+      each decoder_N, linear — their full output, not just the FFN
+      non-linearity), reduces each to the activation at the first occurrence
+      of `target_token` per equation (e.g. "=" — the position whose output
+      predicts the answer), and captures train_dataset AND val_dataset
+      together rather than just one. See _snapshot for exactly what's saved.
+
+      Input shape note: this mode feeds the model dataset.data[:, :-1] (the
+      same slice grok.data.ArithmeticIterator uses for real training
+      batches — see nn._common.ActivationRecorder's capture="ffn" mode /
+      grok.training.TrainableTransformer._step), rather than the full
+      unsliced row the original pipeline script's _get_activations used.
+      Provably identical result: under causal (autoregressive) masking, the
+      hidden state AT `target_token`'s position depends only on tokens at or
+      before it, so whether the sequence continues one token further to the
+      right (the answer, dropped by [:, :-1]) cannot affect it.
+
+      track_accuracy=True additionally computes and appends train/test
+      accuracy to <save_dir>/accuracy.csv every completed epoch (not just
+      snapshot epochs) — ported from the same pipeline script's
+      _predict_dataset/_extract_ground_truth, independent of (and not a
+      duplicate of) grok's own internal accuracy logging
+      (TrainableTransformer.training_epoch_end), which only logs on a
+      geometrically-growing schedule, not every epoch — this is what the
+      published dual-axis Betti-numbers-vs-accuracy figure needs: one
+      contiguous accuracy value per epoch, indexable by row position.
+
+    In both modes: writes <save_dir>/epoch_<N>.pt (zero-padded to 6 digits),
+    one file per snapshot. N=0 is the untrained model (only if
+    save_initial=True); after that, N is the 1-indexed count of completed
+    training epochs.
+
+    Eval-mode caveat (both modes): because the snapshot forward pass runs in
+    eval mode, it's deterministic and excludes whatever dropout/weight_noise
+    would have added during an actual training step at that point — i.e.
+    these are "what this layer computes on this fixed input, given the
+    weights as of epoch N", not literally a recorded activation from a real
+    training step. This is intentional (keeps snapshots comparable across
+    epochs) but worth knowing when interpreting them.
+
+    Storage caveat (both modes): with no `sample_size` cap, every snapshot
+    contains the *entire* chosen dataset(s)' activations, which can reach
+    tens of MB per epoch for realistic model/dataset sizes — see train()'s
+    activation_sample_size docs. capture="named_blocks" applies the same cap
+    independently to train_dataset and val_dataset (each keeps its own fixed
+    subset, since they're different datasets of possibly different sizes).
 
     Lifetime: registers forward hooks in setup() and removes them in
     teardown(), i.e. it's meant for exactly one trainer.fit() call. nn.relu/
@@ -249,6 +316,9 @@ class ActivationRecorder(Callback):
         save_initial: bool = True,
         sample_size: Optional[int] = None,
         sample_seed: int = 0,
+        capture: str = "ffn",
+        target_token: Optional[str] = None,
+        track_accuracy: bool = False,
     ) -> None:
         """
         :param save_dir: directory snapshots are written to; created if
@@ -262,41 +332,78 @@ class ActivationRecorder(Callback):
                              once in setup(). If None, every snapshot covers
                              the whole dataset (see the storage caveat above).
         :param sample_seed: seed for the fixed random subset above.
-        :raises ValueError: if every_n_epochs < 1.
+        :param capture: "ffn" (default) or "named_blocks" — see class docstring.
+        :param target_token: required (and only used) when capture="named_blocks"
+                              — the token (e.g. "=") whose position each
+                              block's activation is read at.
+        :param track_accuracy: only used when capture="named_blocks" — if
+                                True, also appends train/test accuracy to
+                                <save_dir>/accuracy.csv every completed epoch.
+        :raises ValueError: if every_n_epochs < 1, `capture` isn't "ffn" or
+                            "named_blocks", or capture="named_blocks" without
+                            `target_token`.
         """
         if every_n_epochs < 1:
             raise ValueError("every_n_epochs must be >= 1")
+        if capture not in ("ffn", "named_blocks"):
+            raise ValueError(f"capture must be 'ffn' or 'named_blocks', got {capture!r}")
+        if capture == "named_blocks" and target_token is None:
+            raise ValueError("capture='named_blocks' requires target_token (e.g. '=')")
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.every_n_epochs = every_n_epochs
         self.save_initial = save_initial
         self.sample_size = sample_size
         self.sample_seed = sample_seed
+        self.capture = capture
+        self.target_token = target_token
+        self.track_accuracy = track_accuracy
         self._hook_handles = []
         self._ffn_outputs: Dict[int, torch.Tensor] = {}
+        self._block_outputs: Dict[str, torch.Tensor] = {}
         self._sample_indices: Optional[torch.Tensor] = None
+        self._train_sample_indices: Optional[torch.Tensor] = None
+        self._val_sample_indices: Optional[torch.Tensor] = None
+        self._eq_token_id: Optional[int] = None
+        self._train_truth: Optional[List[str]] = None
+        self._val_truth: Optional[List[str]] = None
+        self._accuracy_path: Optional[Path] = None
 
     def setup(self, trainer: Trainer, pl_module: TrainableTransformer, stage: str) -> None:
         """
         pytorch_lightning hook: fires once, before training starts (model
         construction — including prepare_data() — has already happened by
         this point, so pl_module.val_dataset/train_dataset already exist).
-        Registers the FFN forward hooks, picks the fixed activation-sample
-        subset (if sample_size is set), and — if save_initial — snapshots
-        the untrained model as epoch 0.
+        Registers this capture mode's forward hooks, picks the fixed
+        activation-sample subset(s) (if sample_size is set), precomputes
+        ground truth and starts accuracy.csv (if track_accuracy), and — if
+        save_initial — snapshots the untrained model as epoch 0 (and its
+        accuracy, if tracked).
         """
-        self._register_hooks(pl_module)
-        if self.sample_size is not None:
-            dataset = pl_module.val_dataset if len(pl_module.val_dataset) > 0 else pl_module.train_dataset
-            n = min(self.sample_size, len(dataset))
-            generator = torch.Generator().manual_seed(self.sample_seed)
-            # Fixed subset across all epochs, so snapshots stay comparable over training.
-            self._sample_indices = torch.randperm(len(dataset), generator=generator)[:n]
+        if self.capture == "named_blocks":
+            self._register_named_block_hooks(pl_module)
+            self._eq_token_id = self._find_token_id(pl_module, self.target_token)
+            if self.sample_size is not None:
+                self._train_sample_indices = self._fixed_subset(pl_module.train_dataset, self.sample_seed)
+                self._val_sample_indices = self._fixed_subset(pl_module.val_dataset, self.sample_seed)
+            if self.track_accuracy:
+                self._train_truth = self._extract_ground_truth(pl_module.train_dataset)
+                self._val_truth = self._extract_ground_truth(pl_module.val_dataset)
+                self._accuracy_path = self.save_dir / "accuracy.csv"
+                self._accuracy_path.write_text("epoch,train_acc,test_acc\n")
+        else:
+            self._register_hooks(pl_module)
+            if self.sample_size is not None:
+                dataset = pl_module.val_dataset if len(pl_module.val_dataset) > 0 else pl_module.train_dataset
+                self._sample_indices = self._fixed_subset(dataset, self.sample_seed)
+
         if self.save_initial:
             self._snapshot(trainer, pl_module, epoch=0)
+            if self.track_accuracy:
+                self._record_accuracy(pl_module, epoch=0)
 
     def teardown(self, trainer: Trainer, pl_module: TrainableTransformer, stage: str) -> None:
-        """pytorch_lightning hook: removes the FFN forward hooks registered in setup()."""
+        """pytorch_lightning hook: removes the forward hooks registered in setup()."""
         for handle in self._hook_handles:
             handle.remove()
         self._hook_handles = []
@@ -311,10 +418,154 @@ class ActivationRecorder(Callback):
         FitLoop.on_advance_end in pytorch_lightning's source) — so `+ 1`
         below is what turns it into "how many epochs have now completed",
         1-indexed, matching the epoch_<N> filenames.
+
+        track_accuracy fires every completed epoch regardless of
+        every_n_epochs (see class docstring for why accuracy needs finer
+        granularity than snapshots); the snapshot itself still only fires
+        on the every_n_epochs cadence.
         """
         epoch = trainer.current_epoch + 1  # epoch that just finished
+        if self.track_accuracy:
+            self._record_accuracy(pl_module, epoch)
         if epoch % self.every_n_epochs == 0:
             self._snapshot(trainer, pl_module, epoch=epoch)
+
+    def _fixed_subset(self, dataset, seed: int) -> torch.Tensor:
+        """A fixed random subset of `dataset`'s row indices, capped at
+        self.sample_size and stable across epochs/calls for the same seed
+        (so snapshots stay comparable over training)."""
+        n = min(self.sample_size, len(dataset))
+        generator = torch.Generator().manual_seed(seed)
+        return torch.randperm(len(dataset), generator=generator)[:n]
+
+    def _find_token_id(self, pl_module: TrainableTransformer, char: str) -> int:
+        """
+        Resolves `char` (e.g. "=") to its vocabulary id via pl_module's
+        tokenizer — ported from BRACIS-2026/code/pipeline/train.py's
+        MetricsAndPredictionDumper._find_token_id: encodes `char`, then
+        prefers whichever resulting id round-trips back to exactly `char`
+        on its own (falls back to the first id if none do).
+        """
+        tokenizer = pl_module.train_dataset.tokenizer
+        ids = tokenizer.encode(char)
+        for i in ids:
+            if tokenizer.decode(torch.tensor([i])).strip() == char:
+                return i
+        return ids[0]
+
+    def _extract_ground_truth(self, dataset) -> List[str]:
+        """
+        The right-hand-side answer of every equation in `dataset`, as a
+        decoded string — ported from the same pipeline script's
+        _extract_ground_truth: decodes each row, regex-extracts every run
+        of digits, and takes the 3rd one (operand_a, operand_b, answer, for
+        the binary-operator equations this project trains on) as ground
+        truth; "-999" (never a valid prediction) for any row that doesn't
+        have at least 3 such runs, so it can never spuriously "match".
+        """
+        tokenizer = dataset.tokenizer
+        truth = []
+        for idx in range(len(dataset)):
+            text = tokenizer.decode(dataset.data[idx])
+            nums = re.findall(r"\d+", text)
+            truth.append(nums[2] if len(nums) >= 3 else "-999")
+        return truth
+
+    def _predict_and_score(self, pl_module: TrainableTransformer, dataset, truth: List[str]) -> float:
+        """
+        Runs one forward pass over the whole of `dataset` (unbatched — see
+        class docstring's Input shape note; grok's modular-arithmetic
+        datasets are small enough that this is fine, unlike the original
+        pipeline script's DataLoader(batch_size=4096) chunking), predicts
+        the token at target_token's position (argmax over logits), decodes
+        it, and returns the fraction matching `truth` — ported from the
+        same script's _predict_dataset, minus the per-token special-casing
+        for presentation (e.g. "SPACE" for an empty decode) since only the
+        match/no-match outcome is used here, not the decoded string itself.
+
+        :returns: accuracy in [0, 1]; 0.0 if `dataset` is empty.
+        """
+        if len(dataset) == 0:
+            return 0.0
+        device = pl_module.transformer.embedding.weight.device
+        data = dataset.data.to(device)
+        x = data[:, :-1]  # see class docstring's Input shape note
+        with torch.no_grad():
+            logits, *_ = pl_module(x)
+        eq_mask = x == self._eq_token_id
+        target_indices = eq_mask.float().argmax(dim=1)
+        row_indices = torch.arange(x.size(0), device=device)
+        pred_ids = logits[row_indices, target_indices, :].argmax(dim=1).detach().cpu().tolist()
+        tokenizer = dataset.tokenizer
+        correct = sum(
+            1 for pid, t in zip(pred_ids, truth)
+            if tokenizer.decode(torch.tensor([pid])).strip() == t
+        )
+        return correct / len(dataset)
+
+    def _record_accuracy(self, pl_module: TrainableTransformer, epoch: int) -> None:
+        """
+        Computes train/test accuracy (via _predict_and_score) and appends
+        one "<epoch>,<train_acc*100>,<test_acc*100>" row to accuracy.csv.
+        Temporarily switches pl_module to eval mode (restored afterwards).
+        """
+        was_training = pl_module.training
+        pl_module.eval()
+        train_acc = self._predict_and_score(pl_module, pl_module.train_dataset, self._train_truth)
+        test_acc = self._predict_and_score(pl_module, pl_module.val_dataset, self._val_truth)
+        with open(self._accuracy_path, "a") as f:
+            f.write(f"{epoch},{train_acc * 100:.5f},{test_acc * 100:.5f}\n")
+        if was_training:
+            pl_module.train()
+
+    def _register_named_block_hooks(self, pl_module: TrainableTransformer) -> None:
+        """
+        Registers a forward hook on each of _named_blocks(pl_module.transformer)
+        that stashes its (detached, CPU) output into self._block_outputs
+        keyed by block name, ready to be picked up by _snapshot_named_blocks().
+        Some blocks (decoder_N) return a tuple (output, attentions, values)
+        from their forward() — only `output` (index 0) is kept, same as the
+        original pipeline script's get_hook did.
+
+        See _register_hooks's docstring for why block names are bound via
+        `make_hook(name)` rather than captured directly from the loop variable.
+        """
+        for name, block in _named_blocks(pl_module.transformer).items():
+
+            def make_hook(block_name):
+                """Binds `block_name` now and returns a forward hook for that block."""
+
+                def hook(_module, _inputs, output):
+                    act = output[0] if isinstance(output, tuple) else output
+                    self._block_outputs[block_name] = act.detach().cpu()
+
+                return hook
+
+            handle = block.register_forward_hook(make_hook(name))
+            self._hook_handles.append(handle)
+
+    def _extract_named_block_activations(
+        self, pl_module: TrainableTransformer, dataset, indices: Optional[torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Runs one forward pass over `dataset` (or the `indices` subset of it,
+        if given) and returns each named block's activation at the first
+        occurrence of target_token per row: {block_name: (n_rows, features)
+        CPU tensor}.
+        """
+        device = pl_module.transformer.embedding.weight.device
+        data = dataset.data if indices is None else dataset.data[indices]
+        data = data.to(device)
+        x = data[:, :-1]  # see class docstring's Input shape note
+
+        self._block_outputs = {}
+        with torch.no_grad():
+            pl_module.transformer(x, save_activations=False)
+
+        eq_mask = x == self._eq_token_id
+        eq_indices = eq_mask.float().argmax(dim=1).cpu()
+        row_indices = torch.arange(x.size(0))
+        return {name: act[row_indices, eq_indices] for name, act in self._block_outputs.items()}
 
     def _register_hooks(self, pl_module: TrainableTransformer) -> None:
         """
@@ -349,10 +600,25 @@ class ActivationRecorder(Callback):
 
     def _snapshot(self, trainer: Trainer, pl_module: TrainableTransformer, epoch: int) -> None:
         """
-        Runs one forward pass and writes <save_dir>/epoch_<N>.pt (see the
-        class docstring for exactly what it contains and which dataset it's
-        drawn from). Temporarily switches pl_module to eval mode (restored
-        to its prior mode afterwards) so the snapshot is deterministic.
+        Dispatches to _snapshot_ffn or _snapshot_named_blocks depending on
+        self.capture; both write <save_dir>/epoch_<N>.pt and temporarily
+        switch pl_module to eval mode (restored afterwards) so the snapshot
+        is deterministic. See the class docstring for what each mode saves.
+        """
+        was_training = pl_module.training
+        pl_module.eval()
+
+        if self.capture == "named_blocks":
+            self._snapshot_named_blocks(trainer, pl_module, epoch)
+        else:
+            self._snapshot_ffn(trainer, pl_module, epoch)
+
+        if was_training:
+            pl_module.train()
+
+    def _snapshot_ffn(self, trainer: Trainer, pl_module: TrainableTransformer, epoch: int) -> None:
+        """
+        capture="ffn": runs one forward pass and writes <save_dir>/epoch_<N>.pt.
 
         Reconstructs the input tensor the same way
         grok.data.ArithmeticIterator does for real batches
@@ -365,9 +631,6 @@ class ActivationRecorder(Callback):
         train_pct rounding caveat), this will attempt a forward pass on an
         empty batch, which is not specifically guarded against here.
         """
-        was_training = pl_module.training
-        pl_module.eval()
-
         dataset = pl_module.val_dataset if len(pl_module.val_dataset) > 0 else pl_module.train_dataset
         device = pl_module.transformer.embedding.weight.device
         data = dataset.data
@@ -389,8 +652,38 @@ class ActivationRecorder(Callback):
         }
         torch.save(record, self.save_dir / f"epoch_{epoch:06d}.pt")
 
-        if was_training:
-            pl_module.train()
+    def _snapshot_named_blocks(self, trainer: Trainer, pl_module: TrainableTransformer, epoch: int) -> None:
+        """
+        capture="named_blocks": runs two forward passes (train_dataset,
+        val_dataset — see _extract_named_block_activations) and writes
+        <save_dir>/epoch_<N>.pt with:
+
+          {"epoch", "global_step", "non_linearity", "capture": "named_blocks",
+           "target_token", "blocks": {block_name: {"train": (n_train,
+           features) tensor, "test": (n_test, features) tensor}, ...}}
+
+        one entry per _named_blocks() name (embedding, decoder_0, ...,
+        linear). Unlike capture="ffn"'s single "ffn_activations" dict keyed
+        by integer layer index, block names are strings and both dataset
+        splits are present together — see topological_engine._common.
+        extract_point_cloud's key="blocks" handling for how this gets
+        turned into a plain point cloud downstream.
+        """
+        train_acts = self._extract_named_block_activations(pl_module, pl_module.train_dataset, self._train_sample_indices)
+        val_acts = self._extract_named_block_activations(pl_module, pl_module.val_dataset, self._val_sample_indices)
+
+        record = {
+            "epoch": epoch,
+            "global_step": trainer.global_step,
+            "non_linearity": pl_module.hparams.non_linearity,
+            "capture": "named_blocks",
+            "target_token": self.target_token,
+            "blocks": {
+                name: {"train": train_acts[name], "test": val_acts[name]}
+                for name in train_acts
+            },
+        }
+        torch.save(record, self.save_dir / f"epoch_{epoch:06d}.pt")
 
 
 def train(
@@ -402,6 +695,9 @@ def train(
     save_initial_activations: bool = True,
     activation_sample_size: Optional[int] = None,
     activation_sample_seed: int = 0,
+    activation_capture: str = "ffn",
+    activation_target_token: Optional[str] = None,
+    track_accuracy: bool = False,
     activations_root: Optional[Union[str, Path]] = None,
     run_name: Optional[str] = None,
     process_topology: bool = False,
@@ -454,6 +750,18 @@ def train(
                                     ActivationRecorder for exactly which
                                     dataset gets snapshotted and why only one.
     :param activation_sample_seed: seed for the fixed subset above.
+    :param activation_capture: "ffn" (default) or "named_blocks" — forwarded
+                                to ActivationRecorder's `capture` (see its
+                                class docstring for the full comparison).
+                                process_topology=True requires "ffn" (the
+                                only format topological_engine's process_run
+                                functions read).
+    :param activation_target_token: required when activation_capture=
+                                     "named_blocks" (e.g. "=") — forwarded to
+                                     ActivationRecorder's `target_token`.
+    :param track_accuracy: only meaningful with activation_capture=
+                            "named_blocks" — forwarded to ActivationRecorder's
+                            `track_accuracy` (writes accuracy.csv every epoch).
     :param activations_root: base directory under which "<nn_type>_<timestamp>/"
                               (or "<run_name>/", if given) is created.
                               Defaults to nn/activations/.
@@ -496,9 +804,11 @@ def train(
                "dimensionality_reduction": [...]} — the paths each
                process_run call wrote or found already present}
     :raises ValueError: if nn_type isn't "relu"/"gelu", exactly one of
-                         train_data/val_data is given without the other, or
+                         train_data/val_data is given without the other,
                          process_topology=True is combined with a non-default
-                         activations_root (see Limitations below).
+                         activations_root or activation_capture != "ffn" (see
+                         Limitations below), or activation_capture=
+                         "named_blocks" without activation_target_token.
     :raises TypeError: if hparams/hparam_overrides sets an hparam grok
                         doesn't recognize (see _build_hparams).
 
@@ -529,7 +839,25 @@ def train(
         custom activations_root would silently write snapshots somewhere
         topological_engine can't find; this is guarded explicitly (raises
         ValueError) rather than left to fail confusingly deep inside
-        grand_tour.process_run with "no activation snapshots found".
+        grand_tour.process_run with "no activation snapshots found". The
+        same applies to activation_capture: process_topology=True requires
+        "ffn" (the default). Every process_run function CAN read "blocks"
+        snapshots too, via extract_point_cloud's key="blocks" (block name
+        as `layer`, e.g. "decoder_0"; `split="train"` or `"test"`) — but
+        only if called directly with an explicit `layers=[...]` of block
+        names; their `layers=None` auto-detection (used when
+        process_topology=True doesn't override it) always assumes
+        "ffn_activations" is present to measure how many layers exist,
+        which a "named_blocks" snapshot doesn't have. Rejected outright
+        here rather than left to fail confusingly deep inside process_run.
+      * hparams.max_epochs (an add_args() hparam, default None) is honored
+        if set: pytorch_lightning.Trainer stops strictly by epoch count then
+        (max_steps=-1, its own "unbounded" sentinel — matching
+        BRACIS-2026/code/pipeline/train.py's convention). If left None (the
+        default), behavior is unchanged from before this option existed:
+        max_epochs is effectively unbounded (1e8) and hparams.max_steps
+        (add_args() default: 100000) drives stopping instead — grok's own
+        original train() does the same.
       * process_topology=True can easily take far longer than training
         itself — it runs 12 intrinsic-dimension estimators, 3 tour types,
         and 3 dimensionality-reduction methods (each computing its own
@@ -557,6 +885,12 @@ def train(
             "topological_engine's process_run functions always read from nn/activations/ "
             "and have no way to look anywhere else. See train()'s docstring Limitations."
         )
+    if process_topology and activation_capture != "ffn":
+        raise ValueError(
+            f"process_topology=True requires activation_capture='ffn', got {activation_capture!r} — "
+            "grand_tour.process_run/intrinsic_dimension.process_run only read the 'ffn' capture "
+            "format. See train()'s docstring Limitations."
+        )
 
     hparams = _build_hparams(nn_type, hparams, hparam_overrides)
     hparams.datadir = os.path.abspath(hparams.datadir)
@@ -582,12 +916,28 @@ def train(
         save_initial=save_initial_activations,
         sample_size=activation_sample_size,
         sample_seed=activation_sample_seed,
+        capture=activation_capture,
+        target_token=activation_target_token,
+        track_accuracy=track_accuracy,
     )
 
+    if hparams.max_epochs is not None:
+        # Epoch-bounded stopping (matches BRACIS-2026/code/pipeline/train.py's
+        # convention) — max_steps=-1 is pytorch_lightning's own sentinel for
+        # "unbounded" (its TrainingEpochLoop requires an int, unlike
+        # min_steps, which does accept None), so max_epochs is what actually
+        # decides when training stops.
+        max_epochs, max_steps, min_steps = hparams.max_epochs, -1, None
+    else:
+        # Unchanged from before this option existed — grok's own original
+        # train() does the same (max_epochs effectively unbounded, hparams.
+        # max_steps drives stopping instead). See train()'s docstring Limitations.
+        max_epochs, max_steps, min_steps = int(1e8), hparams.max_steps, hparams.max_steps
+
     trainer_args = {
-        "max_steps": hparams.max_steps,
-        "min_steps": hparams.max_steps,
-        "max_epochs": int(1e8),
+        "max_steps": max_steps,
+        "min_steps": min_steps,
+        "max_epochs": max_epochs,
         "val_check_interval": 1,
         "profiler": False,
         "logger": logger,
