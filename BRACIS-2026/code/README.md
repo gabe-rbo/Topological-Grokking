@@ -84,11 +84,25 @@ used anywhere in this pipeline.
 
 1. `run_train.py`: `data.init_data.generate()` builds the (Z_97) dataset,
    `nn.relu.train()` trains the model and saves activation snapshots +
-   `accuracy.csv` under `nn/activations/bracis_<task>_<pct>pct/`.
+   `accuracy.csv` under `code/runs/activations/bracis_<task>_<pct>pct/`
+   (pytorch_lightning logs/checkpoints under `code/runs/pl_logs/`).
 2. `run_analysis.py`: intrinsic dimension (MLE) -> UMAP reduction ->
    persistent homology (Betti numbers), via `topological_engine`'s
    `process_run()` functions, saved under
-   `topological_engine/results/bracis_<task>_<pct>pct/`.
+   `code/runs/results/bracis_<task>_<pct>pct/`.
+
+All three (`activations/`, `pl_logs/`, `results/`) live under
+`BRACIS-2026/code/runs/` — self-contained under this paper's own
+directory, not mixed in with `nn/`'s and `topological_engine/`'s
+repo-root defaults (`nn/activations/`, `nn/runs/`, `topological_engine/results/`),
+which is what ad hoc experiments elsewhere in the repository use instead.
+Set via the `NN_ACTIVATIONS_ROOT`/`NN_RUNS_ROOT`/`TOPOLOGICAL_ENGINE_RESULTS_ROOT`
+environment variables, which every script in this directory sets for
+itself before importing `nn`/`topological_engine` — works whether invoked
+through `reproduce.py` or standalone. `--smoke-test` runs use a
+`smoketest_` run-name prefix instead of `bracis_`, so they never share a
+folder (and never overwrite the raw data) of a real run for the same
+condition.
 
 After all requested conditions:
 
@@ -133,7 +147,6 @@ directory's README for what to trust instead (this file, not that code).
 ## Where the raw data lives
 
 Per-epoch raw activation/prediction dumps (~10 GB) are not stored in this
-repository. `reproduce.py` writes new runs under `nn/activations/` /
-`topological_engine/results/` at the repository root — separate from
-whatever the original published runs' raw data lived under, wherever that
-archive is kept.
+repository. `reproduce.py` writes new runs under `BRACIS-2026/code/runs/`
+(gitignored — see "Pipeline" above) — separate from whatever the original
+published runs' raw data lived under, wherever that archive is kept.

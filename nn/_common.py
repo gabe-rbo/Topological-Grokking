@@ -37,8 +37,17 @@ from grok.data import ArithmeticDataset
 from grok.training import TrainableTransformer, add_args
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-ACTIVATIONS_ROOT = PACKAGE_DIR / "activations"
-RUNS_ROOT = PACKAGE_DIR / "runs"
+# Overridable via environment variable, set before importing this module --
+# lets a caller redirect where runs are written without touching every call
+# site (e.g. BRACIS-2026/code/run_train.py sets these so a paper
+# reproduction run's raw outputs live under BRACIS-2026/code/runs/ instead
+# of here, keeping the paper's outputs self-contained rather than mixed in
+# with ad hoc experiment runs). Unset by default: nn/activations/, nn/runs/,
+# matching every other consumer's expectations (e.g.
+# topological_engine._common.ACTIVATIONS_ROOT, which reads the same
+# NN_ACTIVATIONS_ROOT variable) unless a caller deliberately opts in.
+ACTIVATIONS_ROOT = Path(os.environ["NN_ACTIVATIONS_ROOT"]) if os.environ.get("NN_ACTIVATIONS_ROOT") else PACKAGE_DIR / "activations"
+RUNS_ROOT = Path(os.environ["NN_RUNS_ROOT"]) if os.environ.get("NN_RUNS_ROOT") else PACKAGE_DIR / "runs"
 
 HParams = Union[Namespace, Dict[str, Any]]
 

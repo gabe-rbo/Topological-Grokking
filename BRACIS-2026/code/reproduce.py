@@ -45,6 +45,7 @@ Typical usage:
     python reproduce.py --conditions sum:20 --smoke-test
 """
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,18 @@ ARTICLE_DIR = BRACIS_DIR / "article"
 
 TRAIN_SCRIPT = CODE_DIR / "run_train.py"
 ANALYSIS_SCRIPT = CODE_DIR / "run_analysis.py"
+
+# Keep every raw output (activations, pytorch_lightning logs, topological_engine
+# results) self-contained under BRACIS-2026/code/runs/ instead of nn/'s and
+# topological_engine/'s repo-root defaults. Set here (inherited by the
+# run_train.py/run_analysis.py subprocesses spawned below) and independently
+# by each of those scripts too (setdefault, so whichever sets it first wins)
+# -- run_train.py/run_analysis.py/paper_figures.py all need to agree, whether
+# invoked through this script or standalone.
+_RUNS_ROOT = CODE_DIR / "runs"
+os.environ.setdefault("NN_ACTIVATIONS_ROOT", str(_RUNS_ROOT / "activations"))
+os.environ.setdefault("NN_RUNS_ROOT", str(_RUNS_ROOT / "pl_logs"))
+os.environ.setdefault("TOPOLOGICAL_ENGINE_RESULTS_ROOT", str(_RUNS_ROOT / "results"))
 
 for _p in (CODE_DIR, REPO_ROOT):
     if str(_p) not in sys.path:
@@ -109,9 +122,18 @@ WEIGHT_DECAY_DEFAULT = 1.0
 LOGSCALE_CONDITIONS = {("sum", 30)}
 
 
-def run_name_for(task: str, pct: int) -> str:
-    """nn/activations/<...>/ folder name for one (task, pct) condition."""
-    return f"bracis_{task}_{pct}pct"
+def run_name_for(task: str, pct: int, smoke_test: bool = False) -> str:
+    """
+    code/runs/activations/<...>/ folder name for one (task, pct) condition.
+
+    smoke_test=True uses a "smoketest_" prefix instead of "bracis_", so a
+    smoke-test run never shares a folder (and never overwrites the raw
+    activations/results) of a real run for the same condition -- the same
+    concern stage_figures's plots_root redirect exists for on the figures
+    side, see its docstring.
+    """
+    prefix = "smoketest" if smoke_test else "bracis"
+    return f"{prefix}_{task}_{pct}pct"
 
 
 def run(cmd, dry_run=False, **kwargs):
@@ -147,7 +169,7 @@ def parse_conditions(spec: str):
 
 
 def stage_train(python, task, pct, args):
-    run_name = run_name_for(task, pct)
+    run_name = run_name_for(task, pct, smoke_test=args.smoke_test)
     max_epochs = args.smoke_test_epochs if args.smoke_test else args.max_epochs
     save_every = args.smoke_test_save_every if args.smoke_test else args.save_every
     cmd = [
@@ -167,7 +189,7 @@ def stage_train(python, task, pct, args):
 
 
 def stage_analyze(python, task, pct, args):
-    run_name = run_name_for(task, pct)
+    run_name = run_name_for(task, pct, smoke_test=args.smoke_test)
     cmd = [
         python, str(ANALYSIS_SCRIPT),
         "--run_name", run_name,
@@ -213,7 +235,7 @@ def stage_figures(conditions, args):
     for task in {t for t, _ in conditions}:
         plots_dir = plots_root / TASKS[task]["plots_subdir"]
         pcts = sorted(pct for t, pct in conditions if t == task)
-        runs_by_pct = {pct: run_name_for(task, pct) for pct in pcts}
+        runs_by_pct = {pct: run_name_for(task, pct, smoke_test=args.smoke_test) for pct in pcts}
 
         print(f"\n--- Intrinsic-dimension-evolution figures: {task} ({pcts}) ---")
         written = paper_figures.intrinsic_dimension_evolution(
@@ -224,7 +246,7 @@ def stage_figures(conditions, args):
             print(f"  -> {path}")
 
     for task, pct in conditions:
-        run_name = run_name_for(task, pct)
+        run_name = run_name_for(task, pct, smoke_test=args.smoke_test)
         plots_dir = plots_root / TASKS[task]["plots_subdir"]
         print(f"\n--- Betti/accuracy figures: {task}:{pct} ---")
         for block in CURATED_BETTI_BLOCKS:

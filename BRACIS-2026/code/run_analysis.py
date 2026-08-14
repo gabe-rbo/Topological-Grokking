@@ -21,11 +21,26 @@ Usage:
 import juliacall  # noqa: F401 - MUST be the first import in this process; see module docstring above
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 CODE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = CODE_DIR.parent.parent
+
+# Keep this run's results self-contained under BRACIS-2026/code/runs/
+# instead of nn/ and topological_engine/'s repo-root defaults -- setdefault
+# so an already-set value (e.g. from reproduce.py, which sets the same
+# variables and spawns this as a subprocess -- environment is inherited)
+# wins over recomputing it here. Must happen before importing
+# topological_engine, which reads these at import time. Harmless relative
+# to the juliacall-first requirement above: this only sets plain os.environ
+# entries, it doesn't import torch.
+_RUNS_ROOT = CODE_DIR / "runs"
+os.environ.setdefault("NN_ACTIVATIONS_ROOT", str(_RUNS_ROOT / "activations"))
+os.environ.setdefault("NN_RUNS_ROOT", str(_RUNS_ROOT / "pl_logs"))
+os.environ.setdefault("TOPOLOGICAL_ENGINE_RESULTS_ROOT", str(_RUNS_ROOT / "results"))
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -36,7 +51,7 @@ BLOCKS = ["embedding", "decoder_0", "decoder_1", "linear"]
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--run_name", required=True, help="An nn/activations/ run already trained by run_train.py.")
+    parser.add_argument("--run_name", required=True, help="A code/runs/activations/ run already trained by run_train.py.")
     parser.add_argument("--k_mle", type=int, default=10,
                          help="Neighbors for MLE intrinsic-dimension estimation / UMAP (default: 10, confirmed "
                               "from article/sections_v3/related-work_v3.tex).")

@@ -7,6 +7,7 @@ becomes a target embedding dimension, where results get written, and how
 every result records its own provenance.
 """
 import logging
+import os
 import platform
 import sys
 import zlib
@@ -25,11 +26,18 @@ REPO_ROOT = PACKAGE_DIR.parent
 
 # nn/relu.py / nn/gelu.py write activation snapshots here (see
 # nn._common.ActivationRecorder). This package only ever reads from it.
-ACTIVATIONS_ROOT = REPO_ROOT / "nn" / "activations"
+# Reads the same NN_ACTIVATIONS_ROOT environment variable nn/_common.py
+# itself reads (see its ACTIVATIONS_ROOT comment) -- must resolve to the
+# same place both sides agree on, or this package won't find what nn/ wrote.
+ACTIVATIONS_ROOT = Path(os.environ["NN_ACTIVATIONS_ROOT"]) if os.environ.get("NN_ACTIVATIONS_ROOT") else REPO_ROOT / "nn" / "activations"
 
 # Where this package writes everything it computes. Colocated with the code
-# that produces it, mirroring nn/activations/ living inside nn/.
-RESULTS_ROOT = PACKAGE_DIR / "results"
+# that produces it, mirroring nn/activations/ living inside nn/, unless
+# overridden via TOPOLOGICAL_ENGINE_RESULTS_ROOT (analogous to nn/_common.py's
+# NN_ACTIVATIONS_ROOT/NN_RUNS_ROOT -- e.g. BRACIS-2026/code/run_analysis.py
+# sets this so a paper reproduction run's results live under
+# BRACIS-2026/code/runs/ instead of here).
+RESULTS_ROOT = Path(os.environ["TOPOLOGICAL_ENGINE_RESULTS_ROOT"]) if os.environ.get("TOPOLOGICAL_ENGINE_RESULTS_ROOT") else PACKAGE_DIR / "results"
 
 ActivationKey = str  # "attentions" | "values" | "ffn_activations" | "blocks"
 

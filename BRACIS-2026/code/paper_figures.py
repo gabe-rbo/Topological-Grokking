@@ -35,6 +35,7 @@ article/plots/ under their already-published names.
         k_topology=31, percentile=95.0, output_dir=Path("article/plots/sum"),
     )
 """
+import os
 import re
 from itertools import zip_longest
 from pathlib import Path
@@ -43,12 +44,23 @@ from typing import Dict, List, Sequence
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from topological_engine.dimensionality_reduction import Method
-from topological_engine.intrinsic_dimension import load_run_results as load_id_results
-from topological_engine.persistent_homology import load_run_results as load_ph_results
-
 CODE_DIR = Path(__file__).resolve().parent
-ACTIVATIONS_ROOT = CODE_DIR.parent.parent / "nn" / "activations"
+
+# Keep results/activations lookups self-contained under BRACIS-2026/code/runs/
+# instead of nn/ and topological_engine/'s repo-root defaults -- setdefault
+# so an already-set value (e.g. from reproduce.py, which imports this module
+# in the same process after already setting these) wins over recomputing it
+# here. Must happen before importing topological_engine, which reads these
+# at import time -- see run_train.py/run_analysis.py for the same pattern.
+_RUNS_ROOT = CODE_DIR / "runs"
+os.environ.setdefault("NN_ACTIVATIONS_ROOT", str(_RUNS_ROOT / "activations"))
+os.environ.setdefault("NN_RUNS_ROOT", str(_RUNS_ROOT / "pl_logs"))
+os.environ.setdefault("TOPOLOGICAL_ENGINE_RESULTS_ROOT", str(_RUNS_ROOT / "results"))
+ACTIVATIONS_ROOT = Path(os.environ["NN_ACTIVATIONS_ROOT"])
+
+from topological_engine.dimensionality_reduction import Method  # noqa: E402
+from topological_engine.intrinsic_dimension import load_run_results as load_id_results  # noqa: E402
+from topological_engine.persistent_homology import load_run_results as load_ph_results  # noqa: E402
 
 # The published pipeline named UMAP-reduced files "reduced_<block>_activations.csv"
 # (MP-MLE_UMAP-Reduction.py's `out_file = f"reduced_{df_name}"`, where df_name was
