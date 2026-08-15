@@ -126,31 +126,33 @@ _jl = None
 
 _QUICK_MAPPER_JL_SOURCE = """
 using Random
+using PythonCall
 
-function quick_mapper_jl(G_raw::PyDict{Any, Any}, max_loops::Int=1, min_modularity_gain::Float64=1e-6)
-    V_py = G_raw["V"]
-    E_py = G_raw["E"]
+function quick_mapper_jl(V_arr, E_arr, max_loops::Int=1, min_modularity_gain::Float64=1e-6)
+    V = pyconvert(Vector{Int64}, V_arr)
+    E_mat = pyconvert(Matrix{Int64}, E_arr)
+    num_edges = size(E_mat, 1)
 
-    V = [Int(v) for v in V_py]
-    E = [(Int(e[1]), Int(e[2])) for e in E_py]
-
-    adj = Dict{Int, Vector{Int}}(v => Int[] for v in V)
-    for (u, v) in E
+    adj = Dict{Int64, Vector{Int64}}(v => Int64[] for v in V)
+    for i in 1:num_edges
+        u = E_mat[i, 1]
+        v = E_mat[i, 2]
         push!(adj[u], v)
         push!(adj[v], u)
     end
 
-    m = length(E)
-    L = Dict{Int, Int}(v => v for v in V)
+    m = num_edges
+    L = Dict{Int64, Int64}(v => v for v in V)
 
     if m == 0
-        return Dict("V" => collect(Set(values(L))), "E" => []), L
+        V_res = collect(Set(values(L)))
+        return V_res, Int64[], Int64[], V, V
     end
 
-    degree = Dict{Int, Int}(v => length(adj[v]) for v in V)
+    degree = Dict{Int64, Int64}(v => length(adj[v]) for v in V)
     num_of_loops = 0
     modularity_gain = 1000.0
-    best_labels = Int[]
+    best_labels = Int64[]
     two_m = 2.0 * m
 
     while modularity_gain > min_modularity_gain && num_of_loops < max_loops
@@ -163,7 +165,7 @@ function quick_mapper_jl(G_raw::PyDict{Any, Any}, max_loops::Int=1, min_modulari
                 continue
             end
 
-            NbrLabelSet_vertex = Set{Int}()
+            NbrLabelSet_vertex = Set{Int64}()
             push!(NbrLabelSet_vertex, L[vertex])
             for nbr in neighbors
                 push!(NbrLabelSet_vertex, L[nbr])
@@ -197,7 +199,7 @@ function quick_mapper_jl(G_raw::PyDict{Any, Any}, max_loops::Int=1, min_modulari
         num_of_loops += 1
     end
 
-    E_simple = Set{Tuple{Int, Int}}()
+    E_simple = Set{Tuple{Int64, Int64}}()
     for vertex in V
         for nbr in adj[vertex]
             lv = L[vertex]
@@ -208,8 +210,15 @@ function quick_mapper_jl(G_raw::PyDict{Any, Any}, max_loops::Int=1, min_modulari
         end
     end
 
-    G_simple = Dict("V" => collect(Set(values(L))), "E" => collect(E_simple))
-    return G_simple, L
+    V_res = collect(Set(values(L)))
+    E_simple_vec = collect(E_simple)
+    E_u = [e[1] for e in E_simple_vec]
+    E_v = [e[2] for e in E_simple_vec]
+
+    L_keys = collect(keys(L))
+    L_vals = collect(values(L))
+
+    return V_res, E_u, E_v, L_keys, L_vals
 end
 """
 
@@ -331,13 +340,20 @@ def simplify_graph(
     """
     jl = _julia()
     jl.seval(f"Random.seed!({int(seed)})")
-    G_raw_jl = {"V": list(V), "E": [tuple(e) for e in E]}
-    G_simple_jl, L_jl = jl.quick_mapper_jl(G_raw_jl, max_loops, min_modularity_gain)
+    V_arr = np.ascontiguousarray(V, dtype=np.int64)
+    if len(E) > 0:
+        E_arr = np.ascontiguousarray(E, dtype=np.int64)
+    else:
+        E_arr = np.empty((0, 2), dtype=np.int64)
+
+    v_res, e_u, e_v, l_keys, l_vals = jl.quick_mapper_jl(
+        V_arr, E_arr, int(max_loops), float(min_modularity_gain)
+    )
     G_simple = {
-        "V": list(G_simple_jl["V"]),
-        "E": [tuple(e) for e in G_simple_jl["E"]],
+        "V": [int(x) for x in v_res],
+        "E": [(int(u), int(v)) for u, v in zip(e_u, e_v)],
     }
-    labels = {int(k): int(v) for k, v in L_jl.items()}
+    labels = {int(k): int(v) for k, v in zip(l_keys, l_vals)}
     return G_simple, labels
 
 
