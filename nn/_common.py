@@ -788,10 +788,9 @@ def train(
                               of training itself (see Limitations below),
                               and pulls in topological_engine's dependencies
                               (dtour, pymanopt, scikit-dimension, umap-learn,
-                              pyarrow, ... — see topological_engine/
-                              requirements.txt), which are only imported
-                              when this is actually True, so plain training
-                              runs never need them installed.
+                              pyarrow, ... — see requirements.txt), which are
+                              only imported when this is actually True, so
+                              plain training runs never need them installed.
     :param topology_kwargs: optional {"grand_tour": {...},
                              "intrinsic_dimension": {...},
                              "dimensionality_reduction": {...}} — extra

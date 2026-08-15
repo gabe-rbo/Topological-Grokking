@@ -54,7 +54,7 @@ git submodule update --init
 
 python -m venv .venv && source .venv/bin/activate
 pip install -e openai-grok
-pip install -r topological_engine/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Where the raw data lives
