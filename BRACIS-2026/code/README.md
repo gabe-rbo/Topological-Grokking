@@ -120,11 +120,9 @@ After all requested conditions:
 
 ## Hyperparameters
 
-`sections_v3/methodology_v3.tex` is empty, but the values it would
-describe are stated explicitly in `article/sections_v3/related-work_v3.tex`
-(Sec. "Model Architecture and Training" / "TDA Pipeline") and confirmed
-correct — `reproduce.py`/`run_train.py`/`run_analysis.py` default to
-these:
+The methodology and hyperparameters described in `article/sections_v3/methodology_v3.tex`
+(Sec. "Model Architecture and Training" / "TDA Pipeline") match what
+`reproduce.py`/`run_train.py`/`run_analysis.py` default to:
 
 - **Weight decay**: `lambda = 1.0` (AdamW).
 - **Batch size**: full-batch gradient descent (`batchsize=-1` in grok's

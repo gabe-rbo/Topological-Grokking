@@ -14,23 +14,11 @@ this directory.
 
 ## Known pending items
 
-- **`sections_v3/methodology_v3.tex` is empty (0 bytes)** — `main_v3.tex`
-  `\input`s this file, so the Methodology section won't appear in the PDF
-  until it's filled in. The previous version
-  (`_archive/v2/sections_v2/methodology_v2.tex`) describes the same
-  6-stage pipeline (dataset -> training -> extraction -> intrinsic
-  dimension -> simplicial complex -> persistent homology) and can serve as
-  a starting point, but wasn't copied over automatically since v3 is
-  post-revision and may need reviewer-requested changes.
 - **`sections_v3/introduction_v3.tex` exists but is unused** —
   `main_v3.tex` references `sections/introduction.tex` (the shared one
   above), not `sections_v3/introduction_v3.tex`. Possibly an abandoned
   draft; worth checking whether any of its content should have gone into
   the current introduction.
-- Two hyperparameters (weight decay, MLE's k) have a divergence between
-  what the code actually uses and what an earlier methodology draft
-  describes — see `../code/README.md` for specifics. Resolve before
-  finalizing `methodology_v3.tex`.
 
 ## Older versions
 

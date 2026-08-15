@@ -68,14 +68,6 @@ runs); see `BRACIS-2026/code/README.md`.
 
 See `BRACIS-2026/code/README.md`.
 
-## Known pending items
+## License
 
-- `BRACIS-2026/article/sections_v3/methodology_v3.tex` is empty -- needs to
-  be filled in before the PDF's Methodology section is complete (see
-  `BRACIS-2026/article/README.md`).
-- Two hyperparameters have an unresolved divergence between the code and an
-  earlier draft of the methodology text (weight decay, MLE's k) -- see
-  `BRACIS-2026/code/README.md` for specifics; confirm against the actual
-  published runs before finalizing `methodology_v3.tex`.
-- No `LICENSE` file yet, though the repository has a public GitHub remote --
-  worth adding before making it public.
+This project is licensed under the [MIT License](LICENSE).
