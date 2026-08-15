@@ -7,10 +7,9 @@
 - `sections_v3/background_v3.tex`, `related-work_v3.tex`,
   `methodology_v3.tex`, `results_v3.tex`, `conclusion-future-research_v3.tex`.
 
-Compile with `python ../code/reproduce.py --stages paper` (needs
-`latexmk` and `inkscape` — the article's figures use the LaTeX `svg`
-package), or directly with `latexmk -pdf -shell-escape main_v3.tex` from
-this directory.
+Compile directly with `latexmk -pdf -shell-escape main_v3.tex` from
+this directory (needs `latexmk` and `inkscape` — the article's figures use
+the LaTeX `svg` package).
 
 ## Known pending items
 

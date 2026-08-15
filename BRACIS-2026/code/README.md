@@ -13,8 +13,8 @@ the methodology itself.
 
 - `reproduce.py` — the entry point. Orchestrates all 10 experimental
   conditions (2 tasks — modular sum `+`, modular product `*` — x 5
-  training-data fractions — 10/15/20/25/30%) through four stages:
-  `train`, `analyze`, `figures`, `paper`. Read its module docstring (or
+  training-data fractions — 10/15/20/25/30%) through three stages:
+  `train`, `analyze`, `figures`. Read its module docstring (or
   `python reproduce.py --help`) before running anything — training the
   full sweep from scratch is a task of days of GPU/MPS time, not minutes.
 
@@ -22,11 +22,8 @@ the methodology itself.
   # see the full execution plan without running anything
   python reproduce.py --dry-run
 
-  # reproduce everything (training included) -- slow, ideal for nohup/background
+  # reproduce everything (train, analyze, figures) -- slow, ideal for nohup/background
   python reproduce.py --stages all
-
-  # only recompile the PDF from whatever data/figures already exist
-  python reproduce.py --stages paper
 
   # run just the sum-20% condition (useful for exercising the pipeline mechanically)
   python reproduce.py --conditions sum:20 --stages all
@@ -112,11 +109,9 @@ After all requested conditions:
    Betti-numbers-vs-accuracy figures (curated for `decoder_0` and `linear`
    only, matching what's actually published), written straight into
    `article/plots/{sum,prod}/` under their already-published filenames.
-4. `reproduce.py`'s paper stage compiles `article/main_v3.tex` via
-   `latexmk -shell-escape` (the `-shell-escape` is needed because the
-   article's figures use the LaTeX `svg` package, which invokes Inkscape
-   at compile time — install it first, e.g. `brew install inkscape` on
-   macOS, if `main_v3.pdf` fails with a `..._svg-tex.pdf is missing` error).
+
+(Compiling the article PDF itself is done separately in `BRACIS-2026/article/`
+via standard LaTeX tools — see `BRACIS-2026/article/README.md`).
 
 ## Hyperparameters
 

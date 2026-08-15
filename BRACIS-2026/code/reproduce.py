@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-reproduce.py — recreates the BRACIS-2026 article from scratch (train -> topology -> figures -> PDF).
+reproduce.py — reproduces the BRACIS-2026 experiment results from scratch (train -> topology -> figures).
 
 Orchestrates the paper's 10 experimental conditions (2 tasks — modular sum
 '+' and modular product '*' — x 5 training-data fractions — 10, 15, 20, 25,
@@ -31,11 +31,8 @@ Typical usage:
     # see the full execution plan without running anything
     python reproduce.py --dry-run
 
-    # reproduce everything (training included) -- slow, ideal for nohup/background
+    # reproduce everything (training, analysis, figures) -- slow, ideal for nohup/background
     python reproduce.py --stages all
-
-    # only recompile the PDF from whatever data/figures already exist
-    python reproduce.py --stages paper
 
     # run just the sum-20% condition (useful for exercising the pipeline mechanically)
     python reproduce.py --conditions sum:20 --stages all
@@ -101,7 +98,7 @@ PERCENTILE_DEFAULT = 95.0
 
 # k for MLE (intrinsic-dimension estimation / UMAP's n_neighbors): the
 # original pipeline script's own default was 15, but article/sections_v3/
-# related-work_v3.tex Sec. "TDA Pipeline" states k=10 explicitly ("the MLE
+# methodology_v3.tex Sec. "TDA Pipeline" states k=10 explicitly ("the MLE
 # of Levina and Bickel ... k = 10 nearest neighbors") -- confirmed as the
 # correct, published value; the pipeline script's k=15 default was simply
 # never actually used for the published runs.
@@ -110,7 +107,7 @@ K_MLE_DEFAULT = 10
 # random_seed fixed by the original notebook/pipeline.
 RANDOM_SEED_DEFAULT = 24
 
-# weight decay: article/sections_v3/related-work_v3.tex Sec. "Model
+# weight decay: article/sections_v3/methodology_v3.tex Sec. "Model
 # Architecture and Training" states "weight decay lambda = 1.0" explicitly
 # -- confirmed as the correct, published value; the pipeline script's 0.1
 # default was simply never actually used for the published runs.
@@ -265,33 +262,14 @@ def stage_figures(conditions, args):
                 print(f"  -> {path} (log-scale)")
 
 
-def stage_paper(args):
-    main_tex = ARTICLE_DIR / "main_v3.tex"
-    methodology = ARTICLE_DIR / "sections_v3" / "methodology_v3.tex"
-    if methodology.exists() and methodology.stat().st_size == 0:
-        print("\n[warning] sections_v3/methodology_v3.tex is empty -- the PDF will compile "
-              "without the Methodology section until that file is filled in. "
-              "See BRACIS-2026/article/README.md.\n")
-
-    if shutil.which("inkscape") is None:
-        print("\n[warning] `inkscape` isn't on PATH -- main_v3.tex's \\includesvg figures "
-              "(the svg package, with -shell-escape below) need it to convert each .svg to "
-              "PDF at compile time. Install it first (e.g. `brew install inkscape` on macOS), "
-              "or this stage will fail with \"File ..._svg-tex.pdf is missing\".\n")
-
-    cmd = ["latexmk", "-pdf", "-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
-           "-output-directory=" + str(ARTICLE_DIR), main_tex.name]
-    run(cmd, dry_run=args.dry_run, cwd=str(ARTICLE_DIR))
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Recreates the BRACIS-2026 article from scratch: training, topology, figures, and PDF.",
+        description="Reproduces the BRACIS-2026 experiment results from scratch: training, topology, and figures.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     parser.add_argument("--stages", default="all",
-                         help="Comma-separated stages, among train,analyze,figures,paper (default: all)")
+                         help="Comma-separated stages, among train,analyze,figures (default: all)")
     parser.add_argument("--conditions", default="all",
                          help="'all' or a list like 'sum:20,prod:30' (default: all = the article's 10 conditions)")
     parser.add_argument("--python", type=str, default=sys.executable,
@@ -304,7 +282,7 @@ def main():
                          help="Forwarded to run_train.py --gpu (0=first GPU/MPS available, -1=force CPU).")
     parser.add_argument("--k_mle", type=int, default=K_MLE_DEFAULT,
                          help=f"k for MLE/UMAP (default: {K_MLE_DEFAULT}, confirmed from article/sections_v3/"
-                              f"related-work_v3.tex)")
+                              f"methodology_v3.tex)")
     parser.add_argument("--k_topology", type=int, default=K_TOPOLOGY_DEFAULT,
                          help="k for the dynamic-epsilon graph (confirmed=31 from already-published filenames)")
     parser.add_argument("--percentile", type=float, default=PERCENTILE_DEFAULT)
@@ -326,7 +304,7 @@ def main():
 
     stages = [s.strip() for s in args.stages.split(",")]
     if "all" in stages:
-        stages = ["train", "analyze", "figures", "paper"]
+        stages = ["train", "analyze", "figures"]
 
     conditions = parse_conditions(args.conditions)
 
@@ -353,10 +331,6 @@ def main():
     if "figures" in stages:
         print("\n--- Generating figures ---")
         stage_figures(conditions, args)
-
-    if "paper" in stages:
-        print("\n--- Compiling the article PDF ---")
-        stage_paper(args)
 
     print("\n" + "=" * 78)
     print("Done." if not args.dry_run else "Dry run complete (nothing was executed).")
