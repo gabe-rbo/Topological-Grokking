@@ -54,7 +54,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run_name", required=True, help="A code/runs/activations/ run already trained by run_train.py.")
     parser.add_argument("--k_mle", type=int, default=10,
                          help="Neighbors for MLE intrinsic-dimension estimation / UMAP (default: 10, confirmed "
-                              "from article/sections_v3/related-work_v3.tex).")
+                              "from article/sections_v3/methodology_v3.tex).")
     parser.add_argument("--k_topology", type=int, default=31, help="Neighbors for the dynamic-epsilon graph.")
     parser.add_argument("--percentile", type=float, default=95.0, help="Percentile for the dynamic-epsilon graph.")
     parser.add_argument("--backend", type=str, default="auto", choices=["auto", "cpu", "cuml", "mlx"],

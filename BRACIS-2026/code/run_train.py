@@ -55,7 +55,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--random_seed", type=int, default=24)
     parser.add_argument("--weight_decay", type=float, default=1.0,
                          help="AdamW weight decay lambda (default: 1.0, confirmed from "
-                              "article/sections_v3/related-work_v3.tex).")
+                              "article/sections_v3/methodology_v3.tex).")
     parser.add_argument("--gpu", type=int, default=0, help="Forwarded to nn._common.train (0=first GPU/MPS, -1=CPU).")
     parser.add_argument("--overwrite", action="store_true",
                          help="Retrain even if code/runs/activations/<run_name>/ already has snapshots.")
