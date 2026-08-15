@@ -1,23 +1,17 @@
 \section{Related Work}
 
-Since the initial observation of the grokking phenomenon, numerous studies have attempted to unravel its underlying mechanisms. Although our methodology relies heavily on topological invariants, existing literature offers complementary perspectives that provide meaningful explanations for this delayed generalization. These include:
+Since the initial observation of grokking, several studies have characterized its underlying mechanisms from complementary angles.
 
-\paragraph{Mechanistic Interpretability \cite{nanda2023progressmeasuresgrokkingmechanistic}.} 
-%A prominent line of research seeks to reverse-engineer the internal algorithms learned by neural networks during the grokking phase. 
-Nanda et al.~\cite{nanda2023progressmeasuresgrokkingmechanistic} demonstrated that grokking, despite appearing as a sudden phase transition in test accuracy, is actually driven by a smooth, continuous process of internal circuit formation. By analyzing models trained on modular arithmetic, they found that networks gradually develop robust generalizing circuits (such as discrete Fourier transforms) while simultaneously relying on memorization circuits. As training progresses, the generalizing circuits become more efficient and eventually dominate the network's behavior. This mechanistic view frames grokking as an internal competition between memorizing and generalizing subnetworks.
+\paragraph{Mechanistic Interpretability \cite{nanda2023progressmeasuresgrokkingmechanistic}.}
+Nanda et al.~\cite{nanda2023progressmeasuresgrokkingmechanistic} showed that grokking is driven by a smooth process of internal circuit formation. Networks gradually develop generalizing circuits (e.g., discrete Fourier transforms) while simultaneously relying on memorization circuits; as training progresses, the generalizing circuits eventually dominate.\looseness=-1
 
 \paragraph{Intrinsic Task Symmetry \cite{hwang2026intrinsic}.}
-More recently, the inherent geometry of the representation space has been identified as a primary driver of the grokking phenomenon. Hwang and Park~\cite{hwang2026intrinsic} propose that intrinsic task symmetries define the structural reorganization of a model's representations. They identify a consistent three-stage training dynamic underlying grokking: an initial memorization phase, a symmetry acquisition phase, and a final geometric organization phase. According to their framework, true generalization emerges during the symmetry acquisition phase, after which the representations snap into a structured, task-aligned geometry.
+Hwang and Park~\cite{hwang2026intrinsic} propose that intrinsic task symmetries drive a three-stage training dynamic --- memorization, symmetry acquisition, and geometric organization --- where representations snap into a task-aligned geometry during generalization.\looseness=-1
 
-While the mechanistic approach isolates specific computational circuits and the symmetry-based framework highlights the geometric alignment of representations, our work introduces Topological Data Analysis as a robust, distinct alternative. By tracking the evolution of topological invariants, we aim to quantitatively capture the overarching shape and structural evolution of these representations as the network transitions from memorization to generalization.
-
-\subsection{Positioning of this work}
-
-Taken together, these works establish grokking as a multi-faceted phenomenon with mechanistic, algebraic, and optimization-theoretic explanations. Our work does not compete with any of these perspectives. Instead, we ask a distinct and complementary question: \textit{what global topological properties of the representation manifold characterize the transition from memorization to generalization, and can they serve as detectable markers of grokking onset?}
-
-To our knowledge, ours is the first work to use intrinsic dimension as a temporal indicator of grokking onset, and to combine persistent homology with intrinsic dimension estimation in a dynamic, training-time analysis of the grokking regime. Table~\ref{tab:related} summarizes the positioning of our approach relative to the most closely related works.
+Our work introduces TDA as a complementary lens: rather than isolating circuits or algebraic symmetries, we track global topological invariants to characterize how the full representation manifold evolves across the generalization transition. To our knowledge, ours is the first work to combine persistent homology with intrinsic dimension estimation in a dynamic, training-time analysis of grokking. Table~\ref{tab:related} summarizes our positioning.\looseness=-1
 
 \begin{table}[h]
+\vspace{-6pt}
 \centering
 \caption{Comparison of related approaches. ``Dynamic'' = analysis over
 training; ``Static'' = analysis of a fully trained model.
@@ -42,4 +36,5 @@ Ansuini et al.~\cite{ansuini2019intrinsic}
     & Topological   & Dynamic & \checkmark & \checkmark \\
 \bottomrule
 \end{tabular*}
+\vspace{-6pt}
 \end{table}

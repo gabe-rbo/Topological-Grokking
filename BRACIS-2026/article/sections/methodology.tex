@@ -1,0 +1,152 @@
+\section{Methodology}
+\label{sec:methodology}
+
+Our analysis proceeds through a six-stage pipeline: task and dataset
+definition, model training, representation extraction, intrinsic dimension
+estimation, simplicial complex construction, and persistent homology
+computation. 
+
+% ------------------------------------------------------------------
+\subsection{Task Formulation and Datasets}
+\label{subsec:dataset}
+% ------------------------------------------------------------------
+
+\paragraph{Task formulation.}
+We study two modular arithmetic tasks over $\mathbb{Z}_p$ with prime
+modulus $p = 97$, formulated as next-token prediction following
+Power et al.~\cite{GrokkingOpenAI}. Each input is the four-token
+sequence $
+    \langle\, a \;\circ\; b \;=\; \rangle$ ,
+where $a, b \in \{0, \ldots, p-1\}$ and $\circ \in \{+, \times\}$.
+The model's vocabulary has size $|\mathcal{V}| = p + 2 = 99$,
+comprising the $p$ residues, one operator token, and one equality token.
+The training objective is to predict, at the position immediately
+following the equality token, the single token corresponding to
+\begin{equation}
+    y = (a \;\circ\; b) \bmod p \;\in\; \{0, \ldots, 96\}.
+    \label{eq:target}
+\end{equation}
+The loss is the cross-entropy between the model's output distribution
+over $\mathcal{V}$ and the one-hot encoding of $y$; accuracy is the
+fraction of examples for which the model's argmax equals $y$.
+
+\paragraph{Modular addition.}
+The full dataset consists of all $p^2 = 9{,}409$ ordered pairs $(a,b)$.
+For example, the input $\langle\,45\;+\;72\;=\;\rangle$ should elicit
+$y = (45 + 72) \bmod 97 = 20$. The task defines an abelian group on
+$\mathbb{Z}_{97}$, admitting an exact decomposition via discrete Fourier
+analysis over the group~\cite{nanda2023progressmeasuresgrokkingmechanistic}, which the model must
+discover implicitly through gradient descent.
+
+\paragraph{Modular multiplication.}
+The dataset again contains all $p^2 = 9{,}409$ ordered pairs. For
+example, $\langle\,15\;\times\;9\;=\;\rangle$ should elicit
+$y = (15 \times 9) \bmod 97 = 38$. The non-zero residues
+$\mathbb{Z}_{97}^*$ form a cyclic group of order $p-1 = 96$ under
+multiplication; the case $a = 0$ or $b = 0$ trivially yields $y = 0$.
+Multiplication is empirically harder to grok than addition, requiring
+more training epochs before generalization occurs~\cite{GrokkingOpenAI}.
+
+\paragraph{Train/validation splits.}
+For each task and run, the $p^2$ examples are randomly partitioned into
+a training set of fraction $q \in \{10\%, 15\%, 20\%, 25\%, 30\%\}$
+and a held-out validation set of the remaining $1-q$ fraction~\footnote{No data augmentation or curriculum
+ordering is applied.}. Varying $q$ controls the difficulty of
+generalization: smaller fractions provide less coverage of the input
+space, making it harder for the model to discover the underlying
+algebraic structure. 
+
+% ------------------------------------------------------------------
+\subsection{Model Architecture and Training}
+\label{subsec:model}
+% ------------------------------------------------------------------
+
+We use the decoder-only transformer of Power et al.~\cite{GrokkingOpenAI}
+without modification: two transformer blocks, each with 4-head
+self-attention and a feedforward sublayer of hidden dimension 512,
+preceded by a 128-dimensional token-plus-positional embedding layer and
+followed by a linear projection to $\mathbb{R}^{|\mathcal{V}|}$.
+%
+Training uses AdamW~\cite{loshchilov2018decoupled} with learning rate
+$10^{-3}$, and weight decay
+$\lambda = 1.0$, with full-batch gradient descent for $10^6 + 1$ epochs.
+Validation accuracy is evaluated at each epoch without gradient updates.
+
+% ------------------------------------------------------------------
+\subsection{Representation Extraction}
+\label{subsec:extraction}
+% ------------------------------------------------------------------
+
+At regular checkpoint epochs $t$, we perform a forward pass over the
+\emph{entire} dataset with gradients disabled and record activations
+at the position of the equality token from four components:
+(1) the token-plus-positional embedding layer,
+$A^{(0)}_t \in \mathbb{R}^{n \times 128}$;
+(2) the first decoder block output,
+$A^{(1)}_t \in \mathbb{R}^{n \times 128}$;
+(3) the second decoder block output,
+$A^{(2)}_t \in \mathbb{R}^{n \times 128}$; and
+(4) the pre-softmax linear projection,
+$A^{(3)}_t \in \mathbb{R}^{n \times 99}$,
+where $n = p^2 = 9{,}409$. Each matrix $A^{(\ell)}_t$ is treated as a
+point cloud in its ambient space, with one point per input example.
+The equality-token position is used throughout because it is the
+position from which the output distribution is computed, and is
+therefore the most direct representation of the model's belief about
+the answer at checkpoint $t$.
+
+% ------------------------------------------------------------------
+\subsection{TDA Pipeline}
+\label{subsec:tda_pipeline}
+% ------------------------------------------------------------------
+
+\paragraph{Intrinsic dimension estimation.}
+For each layer $\ell$ and checkpoint $t$, we estimate the intrinsic
+dimension $\hat{d}^{(\ell)}_t$ of $A^{(\ell)}_t$ using the MLE of
+Levina and Bickel~\cite{LevinaBickel} (Equation~\ref{eq:mle_id},
+$k = 10$ nearest neighbors). Note that, this estimate serves two objectives: as a
+standalone geometric descriptor tracked over training, and as the target dimension for the
+subsequent reduction step.
+
+\paragraph{Dimensionality reduction.}
+We apply UMAP~\cite{McInnes2018} to reduce $A^{(\ell)}_t$ to $\tilde{A}^{(\ell)}_t \in \mathbb{R}^{n \times 2\hat{d}}$, with target dimension $2\hat{d}$ motivated by the Strong Whitney Embedding Theorem (Section~\ref{subsec:id}). As discussed in Section~\ref{subsec:id}, UMAP is a heuristic that preserves local connectivity but provides no formal topological guarantees; the reported Betti numbers are exact invariants of the constructed complex but should be interpreted as indicative of structural trends with respect to the underlying activation manifold.
+
+\paragraph{Simplicial complex construction.}
+On the reduced $\tilde{A}^{(\ell)}_t$, we construct a graph using the algorithm of Liu et al.~\cite{QuickMapper}: an edge $(x_i, x_j)$ is included if $\|x_i - x_j\|_2 \leq \varepsilon$, where $\varepsilon$ is the 95th percentile of distances to the $k=31$-th nearest neighbor across all points. The graph is expanded into a full simplicial complex via GUDHI's simplex tree~\cite{GUDHI}, adding 2- and 3-simplices wherever the corresponding cliques exist. The choices $k = 31$ and the 95th-percentile threshold are heuristic~\footnote{A sensitivity analysis over these choices is needed to establish the robustness of the reported signatures, and it remains future work}.
+
+\paragraph{Persistent homology.}
+We compute persistent homology via GUDHI's boundary matrix
+reduction~\cite{GUDHI} for dimensions $k \in \{0, 1, 2\}$.
+From each persistence diagram $\mathcal{D}^{(\ell,k)}_t$ we extract
+$\beta^{(\ell,k)}_t$ (see Section~\ref{subsec:simplicial}) as the count of pairs with persistence exceeding
+$5\%$ of the maximum observed distance (noise threshold $\tau = 0.05$).
+We restrict to $k \leq 2$ because $\mathbb{Z}_{97} \cong$ the 97th
+roots of unity embeds naturally in a 2-torus $\mathbb{T}^2$, whose
+homology is trivial (i.e., equal to zero) above dimension 2; higher-dimensional features are
+negligible in our experiments.
+
+% ------------------------------------------------------------------
+\subsection{Evaluation Protocol}
+\label{subsec:eval}
+% ------------------------------------------------------------------
+
+We compare the longitudinal topological time series
+$\{\beta^{(\ell,k)}_t,\, \hat{d}^{(\ell)}_t\}$ across all checkpoints
+$t$, layers $\ell \in \{0,1,2,3\}$, and dimensions $k \in \{0,1,2\}$,
+for each task and training fraction $q$. %Conditions with $q \geq 20\%$ (generalizing) are compared against $q \leq 15\%$ (non-generalizing).
+We evaluate three hypotheses:
+
+\begin{enumerate}[label=\textbf{(H\arabic*)}]
+    \item \textbf{Betti stabilization.} In generalizing conditions,
+          $\beta^{(\ell,0)}_t$ converges to a stable value as validation accuracy increases.
+
+    \item \textbf{Layer-specific directionality.} Upon generalization,
+          $\beta^{(\ell,0)}_t$ decreases in the decoder layers and
+          increases in the linear layer.
+
+    \item \textbf{Intrinsic dimension reduction.} Generalizing conditions
+          exhibit a lower converged $\hat{d}^{(\ell)}_t$ across all
+          layers than non-generalizing conditions.
+\end{enumerate}
+
+% Evaluation is conducted through visual analysis of longitudinal plots and tabular comparison of end-of-training values. The absence of formal statistical tests is acknowledged as Limitation (Section~\ref{subsec:conclusion_limitations}).

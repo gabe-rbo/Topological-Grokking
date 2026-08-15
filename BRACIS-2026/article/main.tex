@@ -1,4 +1,4 @@
-% This file is the accepted version, after revisions.
+% Accepted Camera Ready Version
 \documentclass[runningheads]{llncs}
 
 \usepackage[T1]{fontenc}
@@ -9,25 +9,12 @@
 \usepackage{color}
 \usepackage{svg}
 \usepackage{float}
-\usepackage{placeins}
 \usepackage{hyperref}
 \renewcommand\UrlFont{\color{blue}\rmfamily}
 \urlstyle{rm}
 \usepackage{todonotes}
 \usepackage{enumitem}
 \usepackage{booktabs}
-\usepackage{microtype}
-% Allow large figures to fill float pages more efficiently
-\renewcommand{\floatpagefraction}{0.85}
-\renewcommand{\topfraction}{0.9}
-% Compact bibliography item spacing to fit all references on one page
-\usepackage{etoolbox}
-\apptocmd{\thebibliography}{\setlength{\itemsep}{-2pt}}{}{}
-% Squeeze figure spacing to save a few lines
-\setlength{\textfloatsep}{10pt plus 1.0pt minus 2.0pt}
-\setlength{\floatsep}{8pt plus 1.0pt minus 2.0pt}
-\setlength{\intextsep}{10pt plus 1.0pt minus 2.0pt}
-\linespread{0.96}
 
 \begin{document}
 
@@ -47,7 +34,6 @@ Heitor S. Ramos\inst{1}}
     \email{gabriel.ribeiro@dcc.ufmg.br}
 }
 
-%
 \maketitle              
 
 \begin{abstract}
@@ -56,13 +42,11 @@ The grokking phenomenon, in which neural networks transition from memorization t
 \end{abstract}
 
 \input{sections/introduction}
-\input{sections_v3/related-work_v3}
-\input{sections/background}
 \input{sections/methodology}
-\input{sections_v3/results_v3_cr}
+\input{sections/background}
+\input{sections/results}
 \input{sections/conclusion-future-research}
 
-\vspace{-6pt}
 \begin{credits}
 \subsubsection{\ackname} This work was supported by the Brazilian agencies CNPq (Grants no. 308380/2025-8) and CAPES through the Academic Excellence Program (PROEX). It is also partially funded by the UFMG Fundep R\&D\&I agreement on Federated Machine Learning for Connected Vehicles, and by Kunumi and Embrapii (Project PDCC-2506.0036).
 
@@ -70,7 +54,6 @@ The grokking phenomenon, in which neural networks transition from memorization t
 The authors declare no competing interests.
 \end{credits}
 
-\vspace{-8pt}
 \bibliographystyle{splncs04}
 \bibliography{sections/bibliography}
 
