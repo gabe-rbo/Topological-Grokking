@@ -287,7 +287,7 @@ def aggregate_intrinsic_dimension(
     bound: str = "whitney",
     margin: int = 0,
     max_dimension: Optional[int] = None,
-    min_dimension: int = 1,
+    min_dimension: int = 2,
     context: str = "",
 ) -> Dict[str, Any]:
     """
@@ -374,7 +374,7 @@ def aggregate_intrinsic_dimension(
                            since silently falling back to fewer dimensions
                            than the guarantee needs is exactly the failure
                            this function exists to prevent.
-    :param min_dimension: hard floor, default 1.
+    :param min_dimension: hard floor, default 2.
     :param context: free-text label included in any warning logged, so a
                      batch run can tell which item triggered it.
     :returns: {"dimension": final int, "intrinsic_dimension_agg": the
